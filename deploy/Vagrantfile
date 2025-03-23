@@ -1,0 +1,100 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+
+#Notes
+#user name for VMs is created as vagrant
+
+#<vagrant box add bento/ubuntu-24.04> to add OS image to internal repository
+#<vagrant up> to start VMs (run at the same folder where this file is, or pass file as argument)
+#<vagrant halt> to stop VMs
+#<vagrant destroy> to remove VMs
+
+# Message config
+VERBOSE_COMMANDS = ['up', 'provision', 'reload']
+VERBOSE_OUTPUT = VERBOSE_COMMANDS.include?(ARGV[0])
+
+# Load environment variables
+env_file = File.join(File.dirname(__FILE__), '..', '.env')
+unless File.exist?(env_file)
+	abort("ERROR: .env file not found. Please create a .env file with your configuration.")
+end
+
+File.foreach(env_file) do |line|
+	next if line.strip.empty? || line.strip.start_with?('#')
+	key, value = line.strip.split('=', 2)
+	ENV[key] = value if value
+end
+puts "Loaded configuration from .env file" if VERBOSE_OUTPUT
+
+required_env_vars = ['SSH_PUBLIC_KEY_PATH', 'SSH_PRIVATE_KEY_PATH', 'VAGRANT_PROVIDER']
+missing_vars = required_env_vars.select { |var| ENV[var].nil? || ENV[var].empty? }
+unless missing_vars.empty?
+	abort("ERROR: Missing required environment variables in .env file: #{missing_vars.join(', ')}")
+end
+
+unless ["virtualbox", "vmware_desktop"].include?(ENV['VAGRANT_PROVIDER'])
+	abort("ERROR: Unsupported provider: #{ENV['VAGRANT_PROVIDER']}")
+end
+
+#Variables
+PUBLIC_KEY_PATH = ENV['SSH_PUBLIC_KEY_PATH']
+PRIVATE_KEY_PATH = ENV['SSH_PRIVATE_KEY_PATH']
+PROVIDER = ENV['VAGRANT_PROVIDER']
+READ_PUBLIC_KEY = File.read(File.expand_path(PUBLIC_KEY_PATH)).strip
+
+# VM IP
+TORCH_FS_IP = "192.168.60.69"
+
+Vagrant.configure("2") do |config|
+	# Global configurations
+	config.vm.box = "bento/ubuntu-24.04"
+	config.vm.box_version = "202404.26.0"
+	
+	if PROVIDER == "virtualbox"
+		puts "Configuring for VirtualBox" if VERBOSE_OUTPUT
+		config.vm.provider "virtualbox" do |vb|
+    		vb.customize [ "modifyvm", :id, "--uartmode1", "disconnected" ]
+    		vb.customize [ "modifyvm", :id, "--uartmode1", "file", File::NULL ]
+    		vb.customize [ "modifyvm", :id, "--uart1", "0x3F8", "4" ]
+    		vb.customize [ "modifyvm", :id, "--cableconnected1", "on" ]
+    		vb.memory = 2048
+    		vb.cpus = 2
+  		end
+	elsif PROVIDER == "vmware_desktop"
+		puts "Configuring for VMware" if VERBOSE_OUTPUT
+		config.vm.provider "vmware_desktop" do |vw|
+  	  		vw.force_vmware_license = "workstation"
+  	  		vw.memory = 2048
+  	  		vw.cpus = 2
+		end
+  	end
+  	
+	config.vm.provision :shell, privileged: true, inline: $provision_all
+
+  	# VM configuration
+  	config.vm.define :torchfs do |tfs|
+    	tfs.vm.hostname = "torchfs"
+    	tfs.vm.network :private_network, ip: TORCH_FS_IP
+  	end
+end
+
+# Provisioning scripts
+$provision_all = <<-SHELL
+	echo "[ALL|Task 1] Configure SSH Public Key authentication"
+	echo "#{READ_PUBLIC_KEY}" >> /home/vagrant/.ssh/authorized_keys
+	sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' /etc/ssh/sshd_config
+	sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config
+	systemctl restart ssh.service
+	apt update -y
+	apt install build-essential -y
+	apt install libglib2.0-dev -y
+	apt install libfuse3-dev -y
+	apt install cmake -y
+	apt install dstat -y
+	apt install libssl-dev -y
+SHELL
