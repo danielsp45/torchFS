@@ -27,11 +27,11 @@ Index* index_init();
 
 //Adds a new key-value entry into the Hashtable
 //Returns -1 in case of failure (or if the key already exists) and 0 otherwise
-int index_add(Index *index, char* key, Indexmeta* meta);
+int index_add(Index *index, const char* key, Indexmeta* meta);
 
 //Get the value (meta) for a specific key (key)
 //Returns -1 in case of failure (or if the key does not exists) and 0 otherwise
-int index_get(Index *index, char* key, Indexmeta** meta);
+int index_get(Index *index, const char* key, Indexmeta** meta);
 
 //Remove a key-value entry from the Hashtable 
 //Returns -1 in case of failure (or if the key does not exists) and 0 otherwise

@@ -76,27 +76,3 @@ static int mknod_wrapper(int dirfd, const char *path, const char *link,
 
 	return res;
 }
-
-//check https://linux.die.net/man/3/evp_digestinit_ex for more info
-//by the way we are missing error handling here...
-static void sha512_hash(const char *filename, unsigned char *hash, unsigned int *hash_len) {
-
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-
-	EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
-
-	char buffer[4096];
-	int fd=open(filename, O_RDONLY);
-
-	size_t res;
-	
-	while((res = read(fd, buffer, 4096))>0){
-		EVP_DigestUpdate(mdctx, buffer, res);
-	}
-
-	close(fd);
-
-	EVP_DigestFinal_ex(mdctx, hash, hash_len);
-	EVP_MD_CTX_destroy(mdctx);
-
-}

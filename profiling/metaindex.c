@@ -18,39 +18,35 @@ Index* index_init() {
 }
 
 //Note: remember that memory allocation and copying must be done here
-int index_add(Index *index, char* key, Indexmeta* meta){
+int index_add(Index *index, const char* key, Indexmeta* meta) {
+    pthread_mutex_lock(&index->mutex);
 
-	pthread_mutex_lock(&index->mutex);
+    if(g_hash_table_contains(index->htable, key)){
+        pthread_mutex_unlock(&index->mutex);
+        return -1;
+    }
 
-	if(g_hash_table_contains(index->htable, key)){
-		pthread_mutex_unlock(&index->mutex);
-		return -1;
-	}
+    char *nkey = strdup(key);
+    g_hash_table_insert(index->htable, nkey, meta);
 
-	char *nkey = strdup(key);
-	g_hash_table_insert(index->htable, nkey, meta);
+    pthread_mutex_unlock(&index->mutex);
 
-	pthread_mutex_unlock(&index->mutex);
-
-	return 0;
+    return 0;
 }
 
-int index_get(Index *index, char* key, Indexmeta** meta){
+int index_get(Index *index, const char* key, Indexmeta** meta) {
+    pthread_mutex_lock(&index->mutex);
 
-	pthread_mutex_lock(&index->mutex);
+    *meta = g_hash_table_lookup(index->htable, key);
+    if (*meta == NULL) {
+        pthread_mutex_unlock(&index->mutex);
+        return -1;
+    }
 
-	*meta = g_hash_table_lookup(index->htable, key);
-	if (*meta == NULL) {
-		pthread_mutex_unlock(&index->mutex);
-		return -1;
-	}
-
-	pthread_mutex_unlock(&index->mutex);
-	
-	return 0;
-
+    pthread_mutex_unlock(&index->mutex);
+    
+    return 0;
 }
-
 
 int index_remove(Index* index, char* key){
 
