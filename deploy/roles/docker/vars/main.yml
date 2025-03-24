@@ -1,0 +1,25 @@
+# Docker dependencies
+docker_dependencies_pkg:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - software-properties-common
+
+# Docker packages
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Docker services
+docker_services:
+  - docker.service
+  - containerd.service
+
+# Docker directories
+docker_directories:
+  - /var/lib/docker
+  - /var/lib/containerd

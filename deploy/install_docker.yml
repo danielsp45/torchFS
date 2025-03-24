@@ -1,0 +1,8 @@
+---
+# Playbook to install Docker
+
+- name: Install Docker
+  hosts: vms
+  roles:
+    - role: docker
+      tags: ["docker"]
