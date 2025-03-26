@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/torchfuse.dir/src/client/TorchFuse.cc.o CMakeFiles/torchfuse.dir/src/client/client.cc.o -o torchfuse  -lfuse3 -lpthread 
