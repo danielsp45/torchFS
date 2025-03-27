@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(TorchFuseProject VERSION 0.1.0 LANGUAGES CXX)
+project(TorchFS VERSION 0.1.0 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -19,10 +19,10 @@ include_directories(${CMAKE_SOURCE_DIR}/src/client)
 file(GLOB CLIENT_SOURCES "${CMAKE_SOURCE_DIR}/src/client/*.cc")
 
 # Create the executable
-add_executable(torchfuse ${CLIENT_SOURCES})
+add_executable(torchfs ${CLIENT_SOURCES})
 
 # Link with fuse libraries found by pkg-config
-target_link_libraries(torchfuse ${FUSE_LIBRARIES})
+target_link_libraries(torchfs ${FUSE_LIBRARIES})
 
 # Pass any necessary compile definitions (for example, to set FUSE_USE_VERSION)
-target_compile_definitions(torchfuse PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE)
+target_compile_definitions(torchfs PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE)

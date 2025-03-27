@@ -1,10 +1,14 @@
 #ifndef TORCHFUSE_H
 #define TORCHFUSE_H
 
+#define FUSE_USE_VERSION 31
+
 #include <fuse.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <string>
+
+static int fill_dir_plus = 0;
 
 class TorchFuse {
 public:

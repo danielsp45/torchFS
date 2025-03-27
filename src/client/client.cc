@@ -173,17 +173,31 @@ static const struct fuse_operations torchfs_oper = {
 //     extern struct fuse_operations torchfs_oper;
 // }
 
+// Your FUSE operations structure for TorchFuse
+// extern const struct fuse_operations torchfs_oper;
+
 int main(int argc, char *argv[])
 {
-	enum { MAX_ARGS = 10 };
-	int i,new_argc;
-	char *new_argv[MAX_ARGS];
+    enum { MAX_ARGS = 10 };
+    int i, new_argc;
+    char *new_argv[MAX_ARGS];
 
-	TorchFuse *fs = new TorchFuse("/mnt/fs");
+    umask(0);
+    // Process custom options (e.g., "--plus") and copy other arguments.
+    for (i = 0, new_argc = 0; (i < argc) && (new_argc < MAX_ARGS); i++) {
+        if (!strcmp(argv[i], "--plus")) {
+            fill_dir_plus = FUSE_FILL_DIR_PLUS;
+        } else {
+            new_argv[new_argc++] = argv[i];
+        }
+    }
 
-    // Pass fs as the private_data to fuse_main.
+    // Create your TorchFuse instance with the desired mount directory.
+    TorchFuse *fs = new TorchFuse("/mnt/fs");
+
+    // Call fuse_main with the modified arguments and fs as private_data.
     int ret = fuse_main(new_argc, new_argv, &torchfs_oper, fs);
 
-	delete fs;
-	return ret;
+    delete fs;
+    return ret;
 }

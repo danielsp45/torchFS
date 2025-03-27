@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <sys/statvfs.h>
 #include <string>
+#include <iostream>
 
 #include "TorchFuse.h"
 
@@ -82,7 +83,6 @@ static int mknod_wrapper(int dirfd, const char *path, const char *link,
 	return res;
 }
 
-static int fill_dir_plus = 0;
 
 // Destructor.
 TorchFuse::~TorchFuse() {
