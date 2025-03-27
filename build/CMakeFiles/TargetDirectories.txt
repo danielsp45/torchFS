@@ -1,3 +1,0 @@
-/home/vagrant/SAD/torchFS/build/CMakeFiles/torchfuse.dir
-/home/vagrant/SAD/torchFS/build/CMakeFiles/edit_cache.dir
-/home/vagrant/SAD/torchFS/build/CMakeFiles/rebuild_cache.dir
