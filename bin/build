@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Determine the directory of the script and move to the project root.
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+# Optionally, display usage information if needed.
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script builds the C++ project by creating (if necessary) and entering the build directory,
+running "cmake ..", and then "make -j" to build the project.
+
+Options:
+  -h, --help      Show this help message.
+EOF
+}
+
+# Check for help flags.
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  display_help
+  exit 0
+fi
+
+# Define the build directory.
+BUILD_DIR="build"
+
+# Create the build directory if it doesn't exist.
+if [[ ! -d "${BUILD_DIR}" ]]; then
+  echo "Creating build directory: ${BUILD_DIR}"
+  mkdir "${BUILD_DIR}"
+fi
+
+# Change into the build directory.
+cd "${BUILD_DIR}" || exit 127
+
+# Run CMake to configure the project.
+echo "Running cmake .."
+cmake .. || { echo "cmake configuration failed"; exit 1; }
+
+# Build the project using make with all available cores.
+echo "Running make -j"
+make -j || { echo "make build failed"; exit 1; }
+
+echo "Build completed successfully."

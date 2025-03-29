@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(TorchFS VERSION 0.1.0 LANGUAGES CXX)
 
+# Global definitions (ensures all files get it)
+add_definitions(-D_FILE_OFFSET_BITS=64)
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,4 +28,4 @@ add_executable(torchfs ${CLIENT_SOURCES})
 target_link_libraries(torchfs ${FUSE_LIBRARIES})
 
 # Pass any necessary compile definitions (for example, to set FUSE_USE_VERSION)
-target_compile_definitions(torchfs PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE)
+target_compile_definitions(torchfs PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE _FILE_OFFSET_BITS=64)
