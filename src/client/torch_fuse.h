@@ -1,6 +1,7 @@
-#ifndef TORCHFUSE_H
-#define TORCHFUSE_H
+#ifndef TORCH_FUSE_H
+#define TORCH_FUSE_H
 
+#include "config.h"
 #define FUSE_USE_VERSION 31
 
 #include <fuse.h>
@@ -8,13 +9,18 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
+#include "options.h"
+#include "status.h"
+
 #define FUSE_FILL_DIR_PLUS 0
 
 class TorchFuse {
 public:
   // Constructor and destructor
-  TorchFuse(const std::string &root);
+  TorchFuse(Options *options);
   ~TorchFuse();
+
+  Status init();
 
   // Filesystem operation methods corresponding to FUSE callbacks
   int getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi);
@@ -50,4 +56,4 @@ private:
   std::string root_;
 };
 
-#endif // TORCHFUSE_H
+#endif // TORCH_FUSE_H

@@ -9,7 +9,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "TorchFuse.h"
+#include "cache.h"
+#include "file_handle.h"
+#include "torch_fuse.h"
 
 // Helper: build a full path from root_ and a relative path.
 // Assumes that 'path' always starts with '/'.
@@ -19,13 +21,6 @@ static std::string make_full_path(const std::string &root, const char *path) {
   if (!r.empty() && r.back() != '/')
     r += "/";
   return r + (path[0] == '/' ? path + 1 : path);
-}
-
-// Constructor: store the root directory for passthrough.
-TorchFuse::TorchFuse(const std::string &root) : root_(root) {
-  // Optionally ensure root_ ends with '/'
-  if (!root_.empty() && root_.back() != '/')
-    root_ += "/";
 }
 
 /*
@@ -78,10 +73,15 @@ static int mknod_wrapper(int dirfd, const char *path, const char *link,
   return res;
 }
 
+// Constructor: store the root directory for passthrough.
+TorchFuse::TorchFuse() {}
+
 // Destructor.
 TorchFuse::~TorchFuse() {
   // Nothing specific to do here.
 }
+
+Status TorchFuse::init() { return Status::OK(); }
 
 int TorchFuse::getattr(const char *path, struct stat *stbuf,
                        struct fuse_file_info *fi) {
@@ -253,11 +253,13 @@ int TorchFuse::open(const char *path, struct fuse_file_info *fi) {
 int TorchFuse::read(const char *path, char *buf, size_t size, off_t offset,
                     struct fuse_file_info *fi) {
   int fd;
+  IFileHandle *fh;
   int res;
   char *new_path = strdup(path);
 
   if (fi == NULL)
-    fd = open(new_path, O_RDONLY);
+    // fd = open(new_path, O_RDONLY);
+    cache_->get(new_path, fh);
   else
     fd = fi->fh;
 

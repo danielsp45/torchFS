@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.12)
 project(TorchFS VERSION 0.1.0 LANGUAGES CXX)
 
+# Export compile commands for clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Global definitions (ensures all files get it)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
