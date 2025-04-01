@@ -11,128 +11,128 @@
 static int torchfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                            off_t offset, struct fuse_file_info *fi,
                            fuse_readdir_flags flags) {
-  (void)flags; // If you don't need to use flags, you can ignore it.
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  // Make sure that TorchFuse::readdir is updated to either ignore the flags
-  // parameter or you adapt it to accept the extra parameter.
-  return fs->readdir(path, buf, filler, offset, fi);
+    (void)flags; // If you don't need to use flags, you can ignore it.
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    // Make sure that TorchFuse::readdir is updated to either ignore the flags
+    // parameter or you adapt it to accept the extra parameter.
+    return fs->readdir(path, buf, filler, offset, fi);
 }
 
 // Updated wrapper for lseek: now returns off_t.
 static off_t torchfs_lseek(const char *path, off_t offset, int whence,
                            struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->lseek(path, offset, whence, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->lseek(path, offset, whence, fi);
 }
 
 // Other wrappers remain the same
 static int torchfs_getattr(const char *path, struct stat *stbuf,
                            struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->getattr(path, stbuf, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->getattr(path, stbuf, fi);
 }
 
 static int torchfs_access(const char *path, int mask) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->access(path, mask);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->access(path, mask);
 }
 
 static int torchfs_readlink(const char *path, char *buf, size_t size) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->readlink(path, buf, size);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->readlink(path, buf, size);
 }
 
 static int torchfs_mknod(const char *path, mode_t mode, dev_t rdev) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->mknod(path, mode, rdev);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->mknod(path, mode, rdev);
 }
 
 static int torchfs_unlink(const char *path) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->unlink(path);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->unlink(path);
 }
 
 static int torchfs_mkdir(const char *path, mode_t mode) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->mkdir(path, mode);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->mkdir(path, mode);
 }
 
 static int torchfs_rmdir(const char *path) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->rmdir(path);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->rmdir(path);
 }
 
 static int torchfs_symlink(const char *from, const char *to) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->symlink(from, to);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->symlink(from, to);
 }
 
 static int torchfs_rename(const char *from, const char *to,
                           unsigned int flags) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->rename(from, to, flags);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->rename(from, to, flags);
 }
 
 static int torchfs_link(const char *from, const char *to) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->link(from, to);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->link(from, to);
 }
 
 static int torchfs_chmod(const char *path, mode_t mode,
                          struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->chmod(path, mode, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->chmod(path, mode, fi);
 }
 
 static int torchfs_chown(const char *path, uid_t uid, gid_t gid,
                          struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->chown(path, uid, gid, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->chown(path, uid, gid, fi);
 }
 
 static int torchfs_truncate(const char *path, off_t size,
                             struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->truncate(path, size, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->truncate(path, size, fi);
 }
 
 static int torchfs_create(const char *path, mode_t mode,
                           struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->create(path, mode, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->create(path, mode, fi);
 }
 
 static int torchfs_open(const char *path, struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->open(path, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->open(path, fi);
 }
 
 static int torchfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->read(path, buf, size, offset, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->read(path, buf, size, offset, fi);
 }
 
 static int torchfs_write(const char *path, const char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->write(path, buf, size, offset, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->write(path, buf, size, offset, fi);
 }
 
 static int torchfs_statfs(const char *path, struct statvfs *stbuf) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->statfs(path, stbuf);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->statfs(path, stbuf);
 }
 
 static int torchfs_release(const char *path, struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->release(path, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->release(path, fi);
 }
 
 static int torchfs_fsync(const char *path, int isdatasync,
                          struct fuse_file_info *fi) {
-  TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
-  return fs->fsync(path, isdatasync, fi);
+    TorchFuse *fs = static_cast<TorchFuse *>(fuse_get_context()->private_data);
+    return fs->fsync(path, isdatasync, fi);
 }
 
 static const struct fuse_operations torchfs_oper = {
@@ -181,26 +181,26 @@ static const struct fuse_operations torchfs_oper = {
 };
 
 int main(int argc, char *argv[]) {
-  enum { MAX_ARGS = 10 };
-  int i, new_argc;
-  char *new_argv[MAX_ARGS];
+    enum { MAX_ARGS = 10 };
+    int i, new_argc;
+    char *new_argv[MAX_ARGS];
 
-  umask(0);
-  int fill_dir_plus;
-  for (i = 0, new_argc = 0; (i < argc) && (new_argc < MAX_ARGS); i++) {
-    if (!strcmp(argv[i], "--plus")) {
-      fill_dir_plus = FUSE_FILL_DIR_PLUS;
-    } else {
-      new_argv[new_argc++] = argv[i];
+    umask(0);
+    int fill_dir_plus;
+    for (i = 0, new_argc = 0; (i < argc) && (new_argc < MAX_ARGS); i++) {
+        if (!strcmp(argv[i], "--plus")) {
+            fill_dir_plus = FUSE_FILL_DIR_PLUS;
+        } else {
+            new_argv[new_argc++] = argv[i];
+        }
     }
-  }
 
-  // Create your TorchFuse instance with the desired mount directory.
-  TorchFuse *fs = new TorchFuse("/mnt/fs");
+    // Create your TorchFuse instance with the desired mount directory.
+    TorchFuse *fs = new TorchFuse("/mnt/fs");
 
-  // Call fuse_main with the modified arguments and fs as private_data.
-  int ret = fuse_main(new_argc, new_argv, &torchfs_oper, fs);
+    // Call fuse_main with the modified arguments and fs as private_data.
+    int ret = fuse_main(new_argc, new_argv, &torchfs_oper, fs);
 
-  delete fs;
-  return ret;
+    delete fs;
+    return ret;
 }
