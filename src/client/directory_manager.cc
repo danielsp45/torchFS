@@ -264,9 +264,9 @@ Status DirectoryManager::rename_dir(const std::string &oldpath,
     }
 
     // Move the directory to the new directory
-    new_dir->move_dir(std::move(subdir));
-    if (!s.ok()) {
-        return s;
+    Status move_status = new_dir->move_dir(std::move(subdir));
+    if (!move_status.ok()) {
+        return move_status;
     }
 
     return Status::OK();
