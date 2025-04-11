@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Determine the directory of this script and change to the project root.
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script formats the C++ project source code using clang-format.
+It expects a .clang-format file in the project root.
+
+Options:
+  -h, --help   Show this help message.
+EOF
+}
+
+# Check for help flag.
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  display_help
+  exit 0
+fi
+
+# Ensure that .clang-format exists at the project root.
+if [[ ! -f ".clang-format" ]]; then
+  echo "Error: .clang-format file not found in the project root."
+  exit 1
+fi
+
+echo "Formatting source files using clang-format..."
+
+# Find source files with typical C++ extensions and format them in-place.
+find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" -o -name "*.cc" -o -name "*.cxx" \) \
+  -exec clang-format -i {} +
+
+echo "Formatting complete."

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Determine the directory of the script and move to the project root.
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script cleans the C++ build directory by removing it entirely.
+Options:
+  -h, --help      Show this help message.
+EOF
+}
+
+# Check for help flags.
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  display_help
+  exit 0
+fi
+
+BUILD_DIR="build"
+
+if [[ -d "${BUILD_DIR}" ]]; then
+  echo "Removing build directory: ${BUILD_DIR}"
+  rm -rf "${BUILD_DIR}" || { echo "Failed to remove build directory"; exit 1; }
+  echo "Clean completed successfully."
+else
+  echo "Build directory does not exist; nothing to clean."
+fi

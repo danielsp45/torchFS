@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Determine the directory of this script and change to the project root.
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+# Default values for directories.
+mount_dir="/mnt/fs"
+cache_dir="/local"
+
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script runs the TorchFuse project with FUSE.
+Options:
+  --mount_dir=<dir>   Set the mount directory (default: /mnt/fs)
+  --cache_dir=<dir>   Set the cache directory (default: /local)
+  -h, --help         Show this help message.
+EOF
+}
+
+# Process command-line arguments.
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --mount_dir=*)
+      mount_dir="${1#*=}"
+      shift
+      ;;
+    --cache_dir=*)
+      cache_dir="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      display_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      display_help
+      exit 1
+      ;;
+  esac
+done
+
+echo "Running TorchFuse with mount_dir=${mount_dir} and cache_dir=${cache_dir}..."
+
+# Execute the project using sudo, calling the binary from the /build directory.
+sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f
