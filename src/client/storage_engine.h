@@ -12,36 +12,6 @@
 #include "fuse.h"
 #include "status.h"
 
-// class StorageEngine {
-//   public:
-//     StorageEngine() {}
-//     virtual ~StorageEngine() {}
-
-//     virtual Status init() = 0;
-
-//     virtual Status open(const std::string &path, int flags,
-//                         uint64_t &handle) = 0;
-//     virtual Status create(const std::string &path, int flags, mode_t mode,
-//                           uint64_t &handle) = 0;
-//     virtual Status close(uint64_t &handle) = 0;
-//     virtual Status remove(const std::string path) = 0;
-//     virtual Status read(uint64_t &handle, Slice result, size_t size,
-//                         off_t offset) = 0;
-//     virtual Status write(uint64_t &handle, Slice data, size_t size,
-//                          off_t offset) = 0;
-//     virtual Status sync(std::string path) = 0;
-//     virtual Status rename(const std::string &oldpath,
-//                           const std::string &newpath) = 0;
-//     virtual Status getattr(const std::string &path, struct stat *stbuf) = 0;
-//     virtual Status readdir(const std::string &path, void *buf,
-//                            fuse_fill_dir_t filler,
-//                            fuse_readdir_flags flags) = 0;
-//     virtual Status mkdir(const std::string &path, mode_t mode) = 0;
-//     virtual Status rmdir(const std::string &path) = 0;
-
-//     virtual std::string get_logic_path(const std::string &path) = 0;
-// };
-
 class StorageEngine {
   public:
     StorageEngine(const std::string &mount_path)
