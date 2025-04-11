@@ -167,7 +167,7 @@ DirectoryManager::remove_file(const std::string &path) {
     }
 
     auto fh = parent_dir->get_file(target);
-    if (fh) {
+    if (!fh) {
         return {Status::NotFound("File not found"), nullptr};
     }
 
