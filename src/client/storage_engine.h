@@ -1,16 +1,14 @@
 #ifndef STORAGE_ENGINE_H
 #define STORAGE_ENGINE_H
 
-#include <atomic>
-#include <cstdint>
-#include <map>
-#include <memory>
-
-#include "directory.h"
 #include "directory_manager.h"
 #include "file_handle.h"
 #include "fuse.h"
 #include "status.h"
+
+#include <cstdint>
+#include <map>
+#include <memory>
 
 class StorageEngine {
   public:
