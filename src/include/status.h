@@ -87,12 +87,16 @@ class Status {
             return "OK";
         case kNotFound:
             return "NotFound";
+        case kAlreadyExists:
+            return "AlreadyExists";
         case kCorruption:
             return "Corruption";
         case kInvalidArgument:
             return "InvalidArgument";
         case kIOError:
             return "IOError";
+        case kInternalError:
+            return "InternalError";
         default:
             return "UnknownError";
         }
