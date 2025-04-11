@@ -227,9 +227,9 @@ Status DirectoryManager::rename_file(const std::string &oldpath,
         return s1;
     }
     // Move the file to the new directory
-    new_dir->move_file(file_handle);
-    if (!s.ok()) {
-        return s;
+    Status move_status = new_dir->move_file(file_handle);
+    if (!move_status.ok()) {
+        return move_status;
     }
 
     return Status::OK();
