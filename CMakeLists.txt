@@ -24,8 +24,11 @@ include_directories(${CMAKE_SOURCE_DIR}/src/client)
 # Collect all source files in the src/client directory
 file(GLOB CLIENT_SOURCES "${CMAKE_SOURCE_DIR}/src/client/*.cc")
 
-# Create the executable
-add_executable(torchfs ${CLIENT_SOURCES})
+# Collect common sources
+file(GLOB COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/common/*.cc")
+
+# Create the executable including both client and common sources
+add_executable(torchfs ${CLIENT_SOURCES} ${COMMON_SOURCES})
 
 # Link with fuse libraries found by pkg-config
 target_link_libraries(torchfs ${FUSE_LIBRARIES})

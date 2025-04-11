@@ -1,43 +1,43 @@
 #ifndef FILE_HANDLE_H
 #define FILE_HANDLE_H
 
+#include "slice.h"
+#include "status.h"
+#include "util.h"
+#include <atomic>
+#include <fcntl.h>
 #include <string>
 
-#include "status.h"
-
-struct FileMetadata {
-  std::string path; // File path (for reference)
-  mode_t mode;      // File mode (permissions and type)
-  uid_t uid;        // Owner user ID
-  gid_t gid;        // Owner group ID
-  off_t size;       // File size in bytes
-  time_t atime;     // Last access time
-  time_t mtime;     // Last modification time
-  time_t ctime;     // Last status change time
-
-  FileMetadata()
-      : mode(0), uid(0), gid(0), size(0), atime(0), mtime(0), ctime(0) {}
-};
-
 class FileHandle {
-public:
-  FileHandle(std::string path) {}
-  virtual ~FileHandle() = default;
+  public:
+    inline static std::atomic<uint64_t> id_counter{0};
 
-  virtual Status read(void *buf, size_t count, off_t offset,
-                      size_t *bytesRead) = 0;
+    // Remove id parameter from constructor
+    FileHandle(std::string logic_path, std::string mount_path)
+        : logic_path_(logic_path), mount_path_(mount_path), fd_(-1), num_(0),
+          id_(id_counter.fetch_add(1, std::memory_order_relaxed)) {}
 
-  virtual Status write(const void *buf, size_t count, off_t offset,
-                       size_t *bytesWritten) = 0;
+    ~FileHandle() {}
 
-  virtual Status remove() = 0;
+    Status open(int flags, mode_t mode);
+    Status open(int flags);
+    Status close();
+    Status read(Slice &dst, size_t size, off_t offset);
+    Status write(Slice &dst, size_t size, off_t offset);
+    Status remove();
+    Status sync();
 
-  virtual Status rename(const std::string &newPath) = 0;
+    std::string get_name() { return filename(logic_path_); }
+    int get_num() { return num_; }
+    uint64_t get_id() { return id_; }
+    struct stat *get_meta();
 
-  virtual Status get_fd() = 0;
-
-private:
-  FileMetadata metadata_;
+  private:
+    std::string logic_path_; // Logical path of the file
+    std::string mount_path_; // Local file path for write operations
+    int fd_;                 // File descriptor
+    int num_;                // Number of open file handles
+    uint64_t id_;            // Unique identifier for the file handle
 };
 
 #endif // FILE_HANDLE_H

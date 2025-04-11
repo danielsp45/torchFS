@@ -8,7 +8,7 @@ cd "${BASE_DIR}/.." || exit 127
 
 # Default values for directories.
 mount_dir="/mnt/fs"
-cache_dir="/local"
+cache_dir="/home/vagrant/server"
 
 function display_help() {
   cat <<EOF

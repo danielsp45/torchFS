@@ -4,21 +4,21 @@
 
 // struct defining the values of the Hashtable
 typedef struct filemeta {
-  uint64_t size;
-  int num_access;   // number of times the file has been accessed
-  int num_metadata; // number of times the metadata has been accessed
-  int num_lseek;    // number of times the file has been lseeked
-  int num_read;     // number of times the file has been read
-  int num_write;    // number of times the file has been written
-  int deleted;      // flag to indicate if the file has been deleted
+    uint64_t size;
+    int num_access;   // number of times the file has been accessed
+    int num_metadata; // number of times the metadata has been accessed
+    int num_lseek;    // number of times the file has been lseeked
+    int num_read;     // number of times the file has been read
+    int num_write;    // number of times the file has been written
+    int deleted;      // flag to indicate if the file has been deleted
 } Indexmeta;
 
 // structure containing the hashtable structure, global mutex and condition
 // variable
 typedef struct index {
-  GHashTable *htable;
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
+    GHashTable *htable;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
 } Index;
 
 // Initializes the index structure
