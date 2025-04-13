@@ -17,7 +17,7 @@ Status StorageEngine::init() {
 Status StorageEngine::open(const std::string &path, int flags,
                            uint64_t &handle) {
 
-    auto [s, fh] = dm_->find_file(path);
+    auto [s, fh] = namespace_->find_file(path);
     if (!fh) {
         return Status::NotFound("File not found");
     }
@@ -31,7 +31,7 @@ Status StorageEngine::open(const std::string &path, int flags,
 
 Status StorageEngine::create(const std::string &path, int flags, mode_t mode,
                              uint64_t &handle) {
-    auto [s, fh] = dm_->create_file(path);
+    auto [s, fh] = namespace_->create_file(path);
     if (!s.ok()) {
         return s;
     }
@@ -56,23 +56,19 @@ Status StorageEngine::close(uint64_t &handle) {
         return Status::NotFound("Invalid file handle");
     }
 
-    // Attempt to close the file.
     Status s = fh->close();
     if (!s.ok()) {
         return s;
     }
 
-    // Remove the file handle from the internal map.
-    // Assuming open_files_ is a member of StorageEngine.
     open_files_.erase(handle);
 
-    // Optionally reset the handle.
     handle = 0;
     return Status::OK();
 }
 
 Status StorageEngine::remove(const std::string path) {
-    auto [s, fh] = dm_->find_file(path);
+    auto [s, fh] = namespace_->find_file(path);
     if (!s.ok()) {
         return s;
     }
@@ -82,13 +78,11 @@ Status StorageEngine::remove(const std::string path) {
 
 Status StorageEngine::read(uint64_t &handle, Slice result, size_t size,
                            off_t offset) {
-    // Retrieve the file handle from the open_files_ map.
     std::shared_ptr<FileHandle> fh = lookup_fh(handle);
     if (!fh) {
         return Status::NotFound("Invalid file handle");
     }
 
-    // Attempt to read from the file.
     Status s = fh->read(result, size, offset);
     if (!s.ok()) {
         return s;
@@ -99,13 +93,11 @@ Status StorageEngine::read(uint64_t &handle, Slice result, size_t size,
 
 Status StorageEngine::write(uint64_t &handle, Slice data, size_t size,
                             off_t offset) {
-    // Retrieve the file handle from the open_files_ map.
     std::shared_ptr<FileHandle> fh = lookup_fh(handle);
     if (!fh) {
         return Status::NotFound("Invalid file handle");
     }
 
-    // Attempt to write to the file.
     Status s = fh->write(data, size, offset);
     if (!s.ok()) {
         return s;
@@ -115,28 +107,26 @@ Status StorageEngine::write(uint64_t &handle, Slice data, size_t size,
 }
 
 Status StorageEngine::sync(std::string path) {
-    // Retrieve the file handle from the open_files_ map.
-    auto [s, fh] = dm_->find_file(path);
+    auto [s, fh] = namespace_->find_file(path);
     if (!s.ok()) {
         return s;
     }
-    // Attempt to sync the file.
     return fh->sync();
 }
 
 Status StorageEngine::rename(const std::string &oldpath,
                              const std::string &newpath) {
-    if (dm_->is_file(oldpath)) {
-        return dm_->rename_file(oldpath, newpath);
-    } else if (dm_->is_dir(oldpath)) {
-        return dm_->rename_dir(oldpath, newpath);
+    if (namespace_->is_file(oldpath)) {
+        return namespace_->rename_file(oldpath, newpath);
+    } else if (namespace_->is_dir(oldpath)) {
+        return namespace_->rename_dir(oldpath, newpath);
     } else {
         return Status::NotFound("File or directory not found");
     }
 }
 
 Status StorageEngine::mkdir(const std::string &path, mode_t mode) {
-    auto [s, dir] = dm_->create_dir(path);
+    auto [s, dir] = namespace_->create_dir(path);
     if (!s.ok()) {
         return s;
     }
@@ -144,7 +134,7 @@ Status StorageEngine::mkdir(const std::string &path, mode_t mode) {
 }
 
 Status StorageEngine::rmdir(const std::string &path) {
-    auto [s, dir] = dm_->remove_dir(path);
+    auto [s, dir] = namespace_->remove_dir(path);
     if (!s.ok()) {
         return s;
     }
@@ -168,14 +158,14 @@ std::shared_ptr<FileHandle> StorageEngine::lookup_fh(uint64_t id) {
 
 Status StorageEngine::getattr(const std::string &path, struct stat *stbuf) {
     struct stat *buf;
-    if (dm_->is_file(path)) {
-        auto [s, fh] = dm_->find_file(path);
+    if (namespace_->is_file(path)) {
+        auto [s, fh] = namespace_->find_file(path);
         if (!s.ok()) {
             return s;
         }
         buf = fh->get_meta();
-    } else if (dm_->is_dir(path)) {
-        auto [s, dir] = dm_->find_dir(path);
+    } else if (namespace_->is_dir(path)) {
+        auto [s, dir] = namespace_->find_dir(path);
         if (!s.ok()) {
             return s;
         }
@@ -196,7 +186,7 @@ Status StorageEngine::getattr(const std::string &path, struct stat *stbuf) {
 Status StorageEngine::readdir(const std::string &path, void *buf,
                               fuse_fill_dir_t filler,
                               fuse_readdir_flags flags) {
-    auto [s, dir] = dm_->find_dir(path);
+    auto [s, dir] = namespace_->find_dir(path);
     if (!s.ok()) {
         return Status::NotFound("Directory not found");
     }

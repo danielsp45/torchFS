@@ -1,5 +1,5 @@
-#ifndef DIRECTORY_MANAGER_H
-#define DIRECTORY_MANAGER_H
+#ifndef NAMESPACE_H
+#define NAMESPACE_H
 
 #include "directory.h"
 #include "file_handle.h"
@@ -8,12 +8,12 @@
 #include <memory>
 #include <vector>
 
-class DirectoryManager {
+class Namespace {
   public:
-    DirectoryManager(const std::string &mount_path)
+    Namespace(const std::string &mount_path)
         : root_(std::make_unique<Directory>("/", mount_path, nullptr)),
           mount_path_(mount_path) {}
-    ~DirectoryManager() {}
+    ~Namespace() {}
 
     // Create a new directory
     std::pair<Status, Directory *> create_dir(const std::string &path);
@@ -52,4 +52,4 @@ class DirectoryManager {
     std::string mount_path_;          // Mount path for the directory
 };
 
-#endif // DIRECTORY_MANAGER_H
+#endif // NAMESPACE_H

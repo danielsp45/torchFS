@@ -1,10 +1,9 @@
-#include "directory_manager.h"
+#include "namespace.h"
 #include "directory.h"
 #include "status.h"
-#include <memory>
 
 std::pair<Status, Directory *>
-DirectoryManager::create_dir(const std::string &path) {
+Namespace::create_dir(const std::string &path) {
     auto [dir_name, new_dir_name] = split_path_from_target(path);
     if (new_dir_name.empty()) {
         return {Status::InvalidArgument("Invalid path"), nullptr};
@@ -27,7 +26,7 @@ DirectoryManager::create_dir(const std::string &path) {
 }
 
 std::pair<Status, std::shared_ptr<FileHandle>>
-DirectoryManager::create_file(const std::string &path) {
+Namespace::create_file(const std::string &path) {
     auto [dir_name, file_name] = split_path_from_target(path);
     if (file_name.empty()) {
         return {Status::InvalidArgument("Invalid path"), nullptr};
@@ -46,7 +45,7 @@ DirectoryManager::create_file(const std::string &path) {
 }
 
 std::pair<Status, Directory *>
-DirectoryManager::find_dir(const std::string &path) {
+Namespace::find_dir(const std::string &path) {
     if (path == "/") {
         return {Status::OK(), root_.get()};
     }
@@ -71,7 +70,7 @@ DirectoryManager::find_dir(const std::string &path) {
 }
 
 std::pair<Status, std::shared_ptr<FileHandle>>
-DirectoryManager::find_file(const std::string &path) {
+Namespace::find_file(const std::string &path) {
     if (path == "/") {
         return {Status::InvalidArgument("Invalid path"), nullptr};
     }
@@ -87,7 +86,7 @@ DirectoryManager::find_file(const std::string &path) {
     return {Status::OK(), fh};
 }
 
-bool DirectoryManager::is_file(const std::string &path) {
+bool Namespace::is_file(const std::string &path) {
     if (path == "/") {
         return false;
     }
@@ -105,7 +104,7 @@ bool DirectoryManager::is_file(const std::string &path) {
     return true;
 }
 
-bool DirectoryManager::is_dir(const std::string &path) {
+bool Namespace::is_dir(const std::string &path) {
     if (path == "/") {
         return true;
     }
@@ -124,7 +123,7 @@ bool DirectoryManager::is_dir(const std::string &path) {
     return true;
 }
 
-bool DirectoryManager::exists(const std::string &path) {
+bool Namespace::exists(const std::string &path) {
     auto [dir_name, target] = split_path_from_target(path);
     auto [s, parent_dir] = find_dir(dir_name);
     if (target.empty() || !s.ok()) {
@@ -142,7 +141,7 @@ bool DirectoryManager::exists(const std::string &path) {
 }
 
 std::pair<Status, std::unique_ptr<Directory>>
-DirectoryManager::remove_dir(const std::string &path) {
+Namespace::remove_dir(const std::string &path) {
     auto [dir_name, target] = split_path_from_target(path);
     auto [s, parent_dir] = find_dir(dir_name);
     if (target.empty() || !s.ok()) {
@@ -159,7 +158,7 @@ DirectoryManager::remove_dir(const std::string &path) {
 }
 
 std::pair<Status, std::shared_ptr<FileHandle>>
-DirectoryManager::remove_file(const std::string &path) {
+Namespace::remove_file(const std::string &path) {
     auto [dir_name, target] = split_path_from_target(path);
     auto [s, parent_dir] = find_dir(dir_name);
     if (target.empty() || !s.ok()) {
@@ -176,7 +175,7 @@ DirectoryManager::remove_file(const std::string &path) {
 }
 
 std::pair<Status, std::vector<std::shared_ptr<FileHandle>>>
-DirectoryManager::list_files(const std::string &path) {
+Namespace::list_files(const std::string &path) {
     auto [dir_name, target_name] = split_path_from_target(path);
     auto [s, dir] = find_dir(dir_name);
     if (target_name.empty() || !s.ok()) {
@@ -189,7 +188,7 @@ DirectoryManager::list_files(const std::string &path) {
 }
 
 std::pair<Status, std::vector<Directory *>>
-DirectoryManager::list_dirs(const std::string &path) {
+Namespace::list_dirs(const std::string &path) {
     auto [dir_name, target_name] = split_path_from_target(path);
     auto [s, dir] = find_dir(dir_name);
     if (target_name.empty() || !s.ok()) {
@@ -200,7 +199,7 @@ DirectoryManager::list_dirs(const std::string &path) {
     return {Status::OK(), dirs};
 }
 
-Status DirectoryManager::rename_file(const std::string &oldpath,
+Status Namespace::rename_file(const std::string &oldpath,
                                      const std::string &newpath) {
     auto [old_dir_name, old_filename] = split_path_from_target(oldpath);
     auto [new_dir_name, new_filename] = split_path_from_target(newpath);
@@ -235,7 +234,7 @@ Status DirectoryManager::rename_file(const std::string &oldpath,
     return Status::OK();
 }
 
-Status DirectoryManager::rename_dir(const std::string &oldpath,
+Status Namespace::rename_dir(const std::string &oldpath,
                                     const std::string &newpath) {
     auto [old_dir_name, old_dirname] = split_path_from_target(oldpath);
     auto [new_dir_name, new_dirname] = split_path_from_target(newpath);

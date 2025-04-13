@@ -1,7 +1,7 @@
 #ifndef STORAGE_ENGINE_H
 #define STORAGE_ENGINE_H
 
-#include "directory_manager.h"
+#include "namespace.h"
 #include "file_handle.h"
 #include "fuse.h"
 #include "status.h"
@@ -13,7 +13,7 @@
 class StorageEngine {
   public:
     StorageEngine(const std::string &mount_path)
-        : dm_(std::make_unique<DirectoryManager>(mount_path)),
+        : namespace_(std::make_unique<Namespace>(mount_path)),
           mount_path_(mount_path) {}
 
     ~StorageEngine() {}
@@ -38,7 +38,7 @@ class StorageEngine {
     std::string get_logic_path(const std::string &path);
 
   private:
-    std::unique_ptr<DirectoryManager> dm_;
+    std::unique_ptr<Namespace> namespace_;
     std::map<std::uint64_t, std::shared_ptr<FileHandle>> open_files_;
     std::string mount_path_; // Directory for local storage
 
