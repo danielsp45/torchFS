@@ -1,3 +1,2 @@
 CompileFlags:
-  Add: [-DFUSE_USE_VERSION=31, -I/usr/include/fuse]
-
+  CompilationDatabase: build/

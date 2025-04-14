@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.12)
 project(TorchFS VERSION 0.1.0 LANGUAGES CXX)
 
+# Export compile commands for clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Global definitions (ensures all files get it)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -21,8 +24,11 @@ include_directories(${CMAKE_SOURCE_DIR}/src/client)
 # Collect all source files in the src/client directory
 file(GLOB CLIENT_SOURCES "${CMAKE_SOURCE_DIR}/src/client/*.cc")
 
-# Create the executable
-add_executable(torchfs ${CLIENT_SOURCES})
+# Collect common sources
+file(GLOB COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/common/*.cc")
+
+# Create the executable including both client and common sources
+add_executable(torchfs ${CLIENT_SOURCES} ${COMMON_SOURCES})
 
 # Link with fuse libraries found by pkg-config
 target_link_libraries(torchfs ${FUSE_LIBRARIES})
