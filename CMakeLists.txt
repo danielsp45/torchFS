@@ -17,6 +17,9 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FUSE REQUIRED fuse3)
 include_directories(${FUSE_INCLUDE_DIRS})
 
+# Find spdlog
+find_package(spdlog REQUIRED)
+
 # Optionally include additional header directories
 include_directories(${CMAKE_SOURCE_DIR}/src/include)
 include_directories(${CMAKE_SOURCE_DIR}/src/client)
@@ -30,8 +33,8 @@ file(GLOB COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/common/*.cc")
 # Create the executable including both client and common sources
 add_executable(torchfs ${CLIENT_SOURCES} ${COMMON_SOURCES})
 
-# Link with fuse libraries found by pkg-config
-target_link_libraries(torchfs ${FUSE_LIBRARIES})
+# Link with fuse libraries found by pkg-config and spdlog
+target_link_libraries(torchfs PRIVATE spdlog::spdlog ${FUSE_LIBRARIES})
 
 # Pass any necessary compile definitions (for example, to set FUSE_USE_VERSION)
 target_compile_definitions(torchfs PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE _FILE_OFFSET_BITS=64)
