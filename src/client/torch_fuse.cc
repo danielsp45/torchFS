@@ -24,7 +24,23 @@ int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 // Removed static for external linkage.
 off_t torch_lseek(const char *path, off_t offset, int whence,
                   struct fuse_file_info *fi) {
-    return static_cast<off_t>(-ENOSYS);
+    (void)path;
+    auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
+
+    // Return error if no valid file handle is present
+    if (fi->fh == 0) {
+        std::cerr << "Error: File handle not valid in read." << std::endl;
+        return -EINVAL;
+    }
+
+    Slice result(buf, size, false);
+    Status s = se->read(fi->fh, result, size, offset);
+    if (!s.ok()) {
+        std::cerr << "Error reading file: " << s.ToString() << std::endl;
+        return -errno;
+    }
+
+    return result.size();
 }
 
 // Removed static for external linkage.

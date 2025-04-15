@@ -38,6 +38,7 @@ class FileHandle {
     int fd_;                 // File descriptor
     int num_;                // Number of open file handles
     uint64_t id_;            // Unique identifier for the file handle
+    int seek_offset_; // Offset for the next read/write operation
 };
 
 #endif // FILE_HANDLE_H
