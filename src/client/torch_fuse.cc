@@ -12,7 +12,7 @@
 int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                   off_t offset, struct fuse_file_info *fi,
                   fuse_readdir_flags flags) {
-    spdlog::info("torch_readdir: Reading directory: {}", path);
+    spdlog::debug("torch_readdir: Reading directory: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->readdir(se->get_logic_path(path), buf, filler, flags);
     if (!s.ok()) {
@@ -29,7 +29,7 @@ off_t torch_lseek(const char *path, off_t offset, int whence,
 
 int torch_getattr(const char *path, struct stat *stbuf,
                   struct fuse_file_info *fi) {
-    spdlog::info("torch_getattr: Getting attributes for: {}", path);
+    spdlog::debug("torch_getattr: Getting attributes for: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->getattr(se->get_logic_path(path), stbuf);
 
@@ -57,7 +57,7 @@ int torch_readlink(const char *path, char *buf, size_t size) { return -ENOSYS; }
 int torch_mknod(const char *path, mode_t mode, dev_t rdev) { return -ENOSYS; }
 
 int torch_unlink(const char *path) {
-    spdlog::info("torch_unlink: Unlinking file: {}", path);
+    spdlog::debug("torch_unlink: Unlinking file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->remove(se->get_logic_path(path));
     if (s.is_not_found()) {
@@ -77,7 +77,7 @@ int torch_unlink(const char *path) {
 }
 
 int torch_mkdir(const char *path, mode_t mode) {
-    spdlog::info("torch_mkdir: Creating directory: {}", path);
+    spdlog::debug("torch_mkdir: Creating directory: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->mkdir(se->get_logic_path(path), mode);
     if (!s.ok()) {
@@ -88,7 +88,7 @@ int torch_mkdir(const char *path, mode_t mode) {
 }
 
 int torch_rmdir(const char *path) {
-    spdlog::info("torch_rmdir: Removing directory: {}", path);
+    spdlog::debug("torch_rmdir: Removing directory: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->rmdir(se->get_logic_path(path));
     if (!s.ok()) {
@@ -129,7 +129,7 @@ int torch_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
 }
 
 int torch_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    spdlog::info("torch_create: Creating file: {}", path);
+    spdlog::debug("torch_create: Creating file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     uint64_t handle;
@@ -144,7 +144,7 @@ int torch_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 }
 
 int torch_open(const char *path, struct fuse_file_info *fi) {
-    spdlog::info("torch_open: Opening file: {}", path);
+    spdlog::debug("torch_open: Opening file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     uint64_t handle;
@@ -161,7 +161,7 @@ int torch_open(const char *path, struct fuse_file_info *fi) {
 
 int torch_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-    spdlog::info("torch_read: Reading file: {}", path);
+    spdlog::debug("torch_read: Reading file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     if (fi->fh == 0) {
@@ -181,7 +181,7 @@ int torch_read(const char *path, char *buf, size_t size, off_t offset,
 
 int torch_write(const char *path, const char *buf, size_t size, off_t offset,
                 struct fuse_file_info *fi) {
-    spdlog::info("torch_write: Writing to file: {}", path);
+    spdlog::debug("torch_write: Writing to file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     if (fi->fh == 0) {
@@ -202,7 +202,7 @@ int torch_write(const char *path, const char *buf, size_t size, off_t offset,
 int torch_statfs(const char *path, struct statvfs *stbuf) { return -ENOSYS; }
 
 int torch_release(const char *path, struct fuse_file_info *fi) {
-    spdlog::info("torch_release: Releasing file: {}", path);
+    spdlog::debug("torch_release: Releasing file: {}", path);
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     if (fi->fh == 0) {

@@ -9,6 +9,8 @@ cd "${BASE_DIR}/.." || exit 127
 # Default values for directories.
 mount_dir="/mnt/fs"
 cache_dir="/home/vagrant/server"
+# Default log level.
+log_level="info"
 
 function display_help() {
   cat <<EOF
@@ -18,7 +20,8 @@ This script runs the TorchFuse project with FUSE.
 Options:
   --mount_dir=<dir>   Set the mount directory (default: /mnt/fs)
   --cache_dir=<dir>   Set the cache directory (default: /local)
-  -h, --help         Show this help message.
+  --log_level=<level> Set the log level (default: info)
+  -h, --help          Show this help message.
 EOF
 }
 
@@ -33,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       cache_dir="${1#*=}"
       shift
       ;;
+    --log_level=*)
+      log_level="${1#*=}"
+      shift
+      ;;
     -h|--help)
       display_help
       exit 0
@@ -45,7 +52,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Running TorchFuse with mount_dir=${mount_dir} and cache_dir=${cache_dir}..."
+echo "Running TorchFuse with mount_dir=${mount_dir}, cache_dir=${cache_dir}, log_level=${log_level}..."
 
 # Execute the project using sudo, calling the binary from the /build directory.
-sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f
+sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f \
+     --log_level="${log_level}"
