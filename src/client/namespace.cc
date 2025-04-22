@@ -2,6 +2,8 @@
 #include "directory.h"
 #include "status.h"
 
+#include <iostream>
+
 std::pair<Status, Directory *>
 Namespace::create_dir(const std::string &path) {
     auto [dir_name, new_dir_name] = split_path_from_target(path);
@@ -17,7 +19,7 @@ Namespace::create_dir(const std::string &path) {
 
     // Check if the directory already exists
     auto dir = parent_dir->get_dir(new_dir_name);
-    if (!dir) {
+    if (dir) {
         return {Status::AlreadyExists("Directory already exists"), nullptr};
     }
 
@@ -90,6 +92,7 @@ bool Namespace::is_file(const std::string &path) {
     if (path == "/") {
         return false;
     }
+    std::cout << path << std::endl;
     auto [dir_name, target] = split_path_from_target(path);
     auto [s, parent_dir] = find_dir(dir_name);
     if (target.empty() || !s.ok()) {

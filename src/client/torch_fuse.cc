@@ -23,25 +23,7 @@ int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 // Removed static for external linkage.
 off_t torch_lseek(const char *path, off_t offset, int whence,
-                  struct fuse_file_info *fi) {
-    (void)path;
-    auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
-
-    // Return error if no valid file handle is present
-    if (fi->fh == 0) {
-        std::cerr << "Error: File handle not valid in read." << std::endl;
-        return -EINVAL;
-    }
-
-    Slice result(buf, size, false);
-    Status s = se->read(fi->fh, result, size, offset);
-    if (!s.ok()) {
-        std::cerr << "Error reading file: " << s.ToString() << std::endl;
-        return -errno;
-    }
-
-    return result.size();
-}
+                  struct fuse_file_info *fi) { return -ENOSYS; }
 
 // Removed static for external linkage.
 int torch_getattr(const char *path, struct stat *stbuf,
@@ -68,7 +50,9 @@ int torch_getattr(const char *path, struct stat *stbuf,
 }
 
 // Removed static for external linkage.
-int torch_access(const char *path, int mask) { return -ENOSYS; }
+int torch_access(const char *path, int mask) { 
+    return 0; // No access check needed
+}
 
 // Removed static for external linkage.
 int torch_readlink(const char *path, char *buf, size_t size) { return -ENOSYS; }
@@ -195,8 +179,11 @@ int torch_read(const char *path, char *buf, size_t size, off_t offset,
 
     // Return error if no valid file handle is present
     if (fi->fh == 0) {
-        std::cerr << "Error: File handle not valid in read." << std::endl;
-        return -EINVAL;
+        int open_res = torch_open(path, fi);
+        if (open_res != 0) {
+            std::cerr << "Error opening file for writing: " << open_res << std::endl;
+            return open_res; // Return the error code from torch_open
+        }
     }
 
     Slice result(buf, size, false);
@@ -216,9 +203,11 @@ int torch_write(const char *path, const char *buf, size_t size, off_t offset,
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     if (fi->fh == 0) {
-        // the file is not opened yet
-        std::cerr << "Error: File handle not valid in read." << std::endl;
-        return -EINVAL;
+        int open_res = torch_open(path, fi); // Attempt to open the file if not already opened
+        if (open_res != 0) {
+            std::cerr << "Error opening file for writing: " << open_res << std::endl;
+            return open_res; // Return the error code from torch_open
+        }
     }
 
     Slice data(buf, size, false);
