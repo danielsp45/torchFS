@@ -27,6 +27,7 @@ class FileHandle {
     Status remove();
     Status sync();
 
+    std::string get_logic_path() { return logic_path_; }
     std::string get_name() { return filename(logic_path_); }
     int get_num() { return num_; }
     uint64_t get_id() { return id_; }

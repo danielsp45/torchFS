@@ -51,7 +51,6 @@ Namespace::find_dir(const std::string &path) {
     if (path == "/") {
         return {Status::OK(), root_.get()};
     }
-
     std::vector<std::string> path_parts = split_path(path);
     if (path_parts.empty()) {
         // it means this is the root directory
@@ -92,7 +91,6 @@ bool Namespace::is_file(const std::string &path) {
     if (path == "/") {
         return false;
     }
-    std::cout << path << std::endl;
     auto [dir_name, target] = split_path_from_target(path);
     auto [s, parent_dir] = find_dir(dir_name);
     if (target.empty() || !s.ok()) {
@@ -116,7 +114,6 @@ bool Namespace::is_dir(const std::string &path) {
     if (target.empty() || !s.ok()) {
         return false;
     }
-
     // Check if the target is a directory
     auto subdir = parent_dir->get_dir(target);
     if (!subdir) {
