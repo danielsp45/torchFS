@@ -11,7 +11,7 @@
 class Namespace {
   public:
     Namespace(const std::string &mount_path)
-        : root_(std::make_unique<Directory>("/", mount_path, nullptr)),
+        : root_(std::make_unique<Directory>("/", mount_path)),
           mount_path_(mount_path) {}
     ~Namespace() {}
 

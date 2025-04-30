@@ -20,13 +20,13 @@ class StorageEngine {
 
     Status init();
 
-    Status open(const std::string &path, int flags, uint64_t &handle);
-    Status create(const std::string &path, int flags, mode_t mode,
-                  uint64_t &handle);
-    Status close(uint64_t &handle);
+    Status open(const std::string &path, int flagse);
+    Status is_open(const std::string &path);
+    Status create(const std::string &path, int flags, mode_t mode);
+    Status close(std::string &path);
     Status remove(const std::string path);
-    Status read(uint64_t &handle, Slice result, size_t size, off_t offset);
-    Status write(uint64_t &handle, Slice data, size_t size, off_t offset);
+    Status read(std::string &path, Slice result, size_t size, off_t offset);
+    Status write(std::string &path, Slice data, size_t size, off_t offset);
     Status sync(std::string path);
     Status rename(const std::string &oldpath, const std::string &newpath);
     Status getattr(const std::string &path, struct stat *stbuf);
@@ -39,11 +39,11 @@ class StorageEngine {
 
   private:
     std::unique_ptr<Namespace> namespace_;
-    std::map<std::uint64_t, std::shared_ptr<FileHandle>> open_files_;
+    std::map<std::string, std::shared_ptr<FileHandle>> open_files_;
     std::string mount_path_; // Directory for local storage
 
-    uint64_t register_fh(std::shared_ptr<FileHandle> fh);
-    std::shared_ptr<FileHandle> lookup_fh(uint64_t handle);
+    std::string register_fh(std::shared_ptr<FileHandle> fh);
+    std::shared_ptr<FileHandle> lookup_fh(std::string &logic_path);
 
     std::shared_ptr<FileHandle> get_file_handle(std::string file_path);
 };
