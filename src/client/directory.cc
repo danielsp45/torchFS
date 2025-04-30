@@ -32,6 +32,9 @@ Directory *Directory::get_dir(const std::string &name) {
 
 std::pair<Status, std::shared_ptr<FileHandle>>
 Directory::create_file(const std::string &name) {
+    // TODO: this operation needs to go to the metadata service to create a new file
+    // Example:
+    // metadata_service_->create_file(path);
     if (files_.find(name) != files_.end()) {
         return {Status::AlreadyExists("File already exists"), nullptr};
     }
@@ -46,6 +49,9 @@ Directory::create_file(const std::string &name) {
 
 std::pair<Status, Directory *>
 Directory::create_subdirectory(const std::string &name) {
+    // TODO: this operation needs to go to the metadata service
+    // EXAMPLE:
+    // metadata_service_->create_directory(path);
     if (subdirs_.find(name) != subdirs_.end()) {
         return {Status::AlreadyExists("Directory already exists"), nullptr};
     }
@@ -67,6 +73,9 @@ Directory::create_subdirectory(const std::string &name) {
 
 std::pair<Status, std::shared_ptr<FileHandle>>
 Directory::remove_file(const std::string name) {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->remove_file(path);
     auto it = files_.find(name);
     if (it == files_.end()) {
         return {Status::NotFound("File not found"), nullptr};
@@ -78,6 +87,9 @@ Directory::remove_file(const std::string name) {
 
 std::pair<Status, std::unique_ptr<Directory>>
 Directory::remove_dir(const std::string name) {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->remove_directory(path);
     auto it = subdirs_.find(name);
     if (it == subdirs_.end()) {
         return {Status::NotFound("Directory not found"), nullptr};
@@ -92,6 +104,9 @@ Directory::remove_dir(const std::string name) {
 }
 
 Status Directory::move_file(std::shared_ptr<FileHandle> fh) {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->move_file(old_path, new_path);
     auto it = files_.find(fh->get_name());
     if (it == files_.end()) {
         return Status::NotFound("File not found");
@@ -102,6 +117,9 @@ Status Directory::move_file(std::shared_ptr<FileHandle> fh) {
 }
 
 Status Directory::move_dir(std::unique_ptr<Directory> dir) {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->move_directory(old_path, new_path);
     auto it = subdirs_.find(dir->get_name());
     if (it == subdirs_.end()) {
         return Status::NotFound("Directory not found");
@@ -112,6 +130,9 @@ Status Directory::move_dir(std::unique_ptr<Directory> dir) {
 }
 
 struct stat *Directory::get_meta() {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->readdir(logic_path_);
     struct stat *buf = new struct stat();
     if (logic_path_ == "/") {
         // If the logic path is root, we need to get the metadata of the
@@ -136,8 +157,9 @@ struct stat *Directory::get_meta() {
 
 Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
                           fuse_readdir_flags /*flags*/) {
-    // TODO: the readdir shouldn't do a system call to get the directory info
-    //  because some files won't be persisted in disk
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->readdir(logic_path_);
     std::string path = join_paths(mount_path_, logic_path_);
     DIR *dp = ::opendir(path.c_str());
     if (dp == NULL) {
@@ -165,6 +187,9 @@ Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
 }
 
 Status Directory::destroy() {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->rmdir(logic_path_);
     std::string path = join_paths(mount_path_, logic_path_);
     if (::rmdir(path.c_str()) == -1) {
         return Status::IOError("Failed to remove directory: " +
@@ -175,6 +200,9 @@ Status Directory::destroy() {
 }
 
 std::vector<std::shared_ptr<FileHandle>> Directory::list_files() {
+    // TODO: this operation needs to go to the metadata service
+    // Example:
+    // metadata_service_->readdir(logic_path_);
     std::vector<std::shared_ptr<FileHandle>> files;
     for (auto &entry : files_) {
         files.push_back(entry.second);

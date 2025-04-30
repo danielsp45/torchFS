@@ -143,7 +143,7 @@ Status StorageEngine::rmdir(const std::string &path) {
 }
 
 uint64_t StorageEngine::register_fh(std::shared_ptr<FileHandle> fh) {
-    uint64_t id = fh->get_id();
+    uint64_t id = fh->get_inode();
     open_files_[id] = fh;
     return id;
 }

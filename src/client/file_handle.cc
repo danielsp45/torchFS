@@ -9,6 +9,9 @@
 #include "util.h"
 
 Status FileHandle::open(int flags, mode_t mode) {
+    // TODO: this method needs to go to the metadata service only if 
+    // Example:
+    // metadata_service_->open(logic_path_);
     std::string full_path = join_paths(mount_path_, logic_path_);
     fd_ = ::open(full_path.c_str(), flags, mode);
     if (fd_ == -1) {
@@ -19,6 +22,9 @@ Status FileHandle::open(int flags, mode_t mode) {
 }
 
 Status FileHandle::open(int flags) {
+    // TODO: this method needs to go to the metadata service
+    // Example:
+    // metadata_service_->open(logic_path_);
     std::string full_path = join_paths(mount_path_, logic_path_);
     fd_ = ::open(full_path.c_str(), flags);
     if (fd_ == -1) {
@@ -29,6 +35,8 @@ Status FileHandle::open(int flags) {
 }
 
 Status FileHandle::close() {
+    // TODO: maybe needs to go to the metadata service
+    // in case the metadata service keeps track of open files
     if (fd_ != -1) {
         if (::close(fd_) == -1) {
             return Status::IOError("Failed to close file: " +
@@ -85,6 +93,10 @@ Status FileHandle::sync() {
 }
 
 struct stat *FileHandle::get_meta() {
+    // TODO: this method should either read from the cached metadata or
+    // request the metadata server for the file.
+    // Example:
+    // metadata_service_->get_file(inode_);
     struct stat *buf = new struct stat();
     std::string full_path = join_paths(mount_path_, logic_path_);
     if (::stat(full_path.c_str(), buf) == -1) {
