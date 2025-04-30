@@ -12,9 +12,8 @@
 
 class Directory {
   public:
-    Directory(const std::string &logic_path, const std::string &mount_path,
-              const Directory *parent)
-        : name_(filename(logic_path_)), logic_path_(logic_path),
+    Directory(const std::string &logic_path, const std::string &mount_path)
+        : name_(filename(logic_path)), logic_path_(logic_path),
           mount_path_(mount_path), subdirs_(), files_() {}
 
     ~Directory() = default;

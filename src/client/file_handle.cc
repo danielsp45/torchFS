@@ -9,42 +9,49 @@
 #include "util.h"
 
 Status FileHandle::open(int flags, mode_t mode) {
-    // TODO: this method needs to go to the metadata service only if 
-    // Example:
-    // metadata_service_->open(logic_path_);
-    std::string full_path = join_paths(mount_path_, logic_path_);
-    fd_ = ::open(full_path.c_str(), flags, mode);
-    if (fd_ == -1) {
-        return Status::IOError("Failed to open file: " +
-                               std::string(strerror(errno)));
+    if (num_ > 0) {
+        num_++;
+        return Status::OK();
+    } else {
+        std::string full_path = join_paths(mount_path_, logic_path_);
+        fd_ = ::open(full_path.c_str(), flags, mode);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
+        }
+        return Status::OK();
     }
-    return Status::OK();
 }
 
 Status FileHandle::open(int flags) {
-    // TODO: this method needs to go to the metadata service
-    // Example:
-    // metadata_service_->open(logic_path_);
-    std::string full_path = join_paths(mount_path_, logic_path_);
-    fd_ = ::open(full_path.c_str(), flags);
-    if (fd_ == -1) {
-        return Status::IOError("Failed to open file: " +
-                               std::string(strerror(errno)));
+    if (num_ > 0) {
+        num_++;
+        return Status::OK();
+    } else {
+        std::string full_path = join_paths(mount_path_, logic_path_);
+        fd_ = ::open(full_path.c_str(), flags);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
+        }
+        return Status::OK();
     }
-    return Status::OK();
 }
 
 Status FileHandle::close() {
-    // TODO: maybe needs to go to the metadata service
-    // in case the metadata service keeps track of open files
-    if (fd_ != -1) {
-        if (::close(fd_) == -1) {
-            return Status::IOError("Failed to close file: " +
-                                   std::string(strerror(errno)));
+    if (num_ > 1) {
+        num_--;
+        return Status::OK();
+    } else {
+        if (fd_ != -1) {
+            if (::close(fd_) == -1) {
+                return Status::IOError("Failed to close file: " +
+                                       std::string(strerror(errno)));
+            }
+            fd_ = -1;
         }
-        fd_ = -1;
+        return Status::OK();
     }
-    return Status::OK();
 }
 
 Status FileHandle::read(Slice &dst, size_t size, off_t offset) {

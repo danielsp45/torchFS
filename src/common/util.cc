@@ -2,6 +2,7 @@
 #include <sstream> // Include for std::istringstream
 #include <string>
 #include <vector>
+#include <iostream>
 
 std::pair<std::string, std::string>
 split_path_from_target(const std::string &path) {
@@ -49,6 +50,10 @@ std::string join_paths(const std::string &path1, const std::string &path2) {
     }
     if (path2.empty()) {
         return path1;
+    }
+    //path 1 is not "/" but ends in "/"
+    if (!path1.compare("/")){
+        return "/" + path2;
     }
     if (path1.back() == '/') {
         // remove the trailing slash from path1

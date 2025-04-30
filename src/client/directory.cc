@@ -11,6 +11,7 @@
 #include <string>
 #include <sys/stat.h> // Added for stat()
 #include <utility>
+#include <iostream>
 
 // Look up an existing file in the directory.
 std::shared_ptr<FileHandle> Directory::get_file(const std::string name) {
@@ -56,12 +57,12 @@ Directory::create_subdirectory(const std::string &name) {
         return {Status::AlreadyExists("Directory already exists"), nullptr};
     }
     std::string new_path = join_paths(logic_path_, name);
-    auto new_dir = std::make_unique<Directory>(new_path, mount_path_, this);
+    auto new_dir = std::make_unique<Directory>(new_path, mount_path_);
     Directory *new_dir_ptr = new_dir.get();
     subdirs_[name] = std::move(new_dir);
-
+    auto new_mount_path = join_paths(mount_path_, new_path);
     // TODO: the mode should be passed from the caller
-    int r = ::mkdir(new_path.c_str(), 0755); // Use appropriate permissions
+    int r = ::mkdir(new_mount_path.c_str(), 0755); // Use appropriate permissions
     if (r == -1) {
         return {Status::IOError("Failed to create directory: " +
                                 std::string(strerror(errno))),

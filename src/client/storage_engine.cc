@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <dirent.h>
 #include <fcntl.h> // For O_CREAT and file mode flags
+#include <iostream>
 #include <memory>
 
 Status StorageEngine::init() {
@@ -14,14 +15,13 @@ Status StorageEngine::init() {
     return Status::OK();
 }
 
-Status StorageEngine::open(const std::string &path, int flags,
-                           uint64_t &handle) {
+Status StorageEngine::open(const std::string &path, int flags) {
 
     auto [s, fh] = namespace_->find_file(path);
     if (!fh) {
         return Status::NotFound("File not found");
     }
-    handle = register_fh(fh);
+    register_fh(fh);
     s = fh->open(flags);
     if (!s.ok()) {
         return s;
@@ -29,8 +29,15 @@ Status StorageEngine::open(const std::string &path, int flags,
     return Status::OK();
 }
 
-Status StorageEngine::create(const std::string &path, int flags, mode_t mode,
-                             uint64_t &handle) {
+Status StorageEngine::is_open(const std::string &path) {
+    auto it = open_files_.find(path);
+    if (it != open_files_.end()) {
+        return Status::OK();
+    }
+    return Status::NotFound("File not found");
+}
+
+Status StorageEngine::create(const std::string &path, int flags, mode_t mode) {
     auto [s, fh] = namespace_->create_file(path);
     if (!s.ok()) {
         return s;
@@ -49,9 +56,9 @@ Status StorageEngine::create(const std::string &path, int flags, mode_t mode,
     return Status::OK();
 }
 
-Status StorageEngine::close(uint64_t &handle) {
+Status StorageEngine::close(std::string &path) {
     // Retrieve the file handle from the open_files_ map.
-    std::shared_ptr<FileHandle> fh = lookup_fh(handle);
+    std::shared_ptr<FileHandle> fh = lookup_fh(path);
     if (!fh) {
         return Status::NotFound("Invalid file handle");
     }
@@ -61,9 +68,8 @@ Status StorageEngine::close(uint64_t &handle) {
         return s;
     }
 
-    open_files_.erase(handle);
+    open_files_.erase(path);
 
-    handle = 0;
     return Status::OK();
 }
 
@@ -76,9 +82,9 @@ Status StorageEngine::remove(const std::string path) {
     return fh->remove();
 }
 
-Status StorageEngine::read(uint64_t &handle, Slice result, size_t size,
+Status StorageEngine::read(std::string &path, Slice result, size_t size,
                            off_t offset) {
-    std::shared_ptr<FileHandle> fh = lookup_fh(handle);
+    std::shared_ptr<FileHandle> fh = lookup_fh(path);
     if (!fh) {
         return Status::NotFound("Invalid file handle");
     }
@@ -91,9 +97,9 @@ Status StorageEngine::read(uint64_t &handle, Slice result, size_t size,
     return Status::OK();
 }
 
-Status StorageEngine::write(uint64_t &handle, Slice data, size_t size,
+Status StorageEngine::write(std::string &path, Slice data, size_t size,
                             off_t offset) {
-    std::shared_ptr<FileHandle> fh = lookup_fh(handle);
+    std::shared_ptr<FileHandle> fh = lookup_fh(path);
     if (!fh) {
         return Status::NotFound("Invalid file handle");
     }
@@ -142,14 +148,14 @@ Status StorageEngine::rmdir(const std::string &path) {
     return s;
 }
 
-uint64_t StorageEngine::register_fh(std::shared_ptr<FileHandle> fh) {
-    uint64_t id = fh->get_inode();
-    open_files_[id] = fh;
-    return id;
+std::string StorageEngine::register_fh(std::shared_ptr<FileHandle> fh) {
+    std::string path = fh->get_logic_path();
+    open_files_[path] = fh;
+    return path;
 }
 
-std::shared_ptr<FileHandle> StorageEngine::lookup_fh(uint64_t id) {
-    auto it = open_files_.find(id);
+std::shared_ptr<FileHandle> StorageEngine::lookup_fh(std::string &path) {
+    auto it = open_files_.find(path);
     if (it != open_files_.end()) {
         return it->second;
     }
