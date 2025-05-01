@@ -1,37 +1,47 @@
 #include "metadata.h"
+#include <sys/stat.h>
 
 MetadataStorage::MetadataStorage() {
-    // Initialize RocksDB or any other database connection here.
     rocksdb::Options options;
     options.create_if_missing = true;
-    rocksdb::Status status = rocksdb::DB::Open(options, "/tmp/torchdb", &db_);
+    options.create_missing_column_families = true;
+
+    rocksdb::ColumnFamilyOptions cf_options;
+    cf_options.comparator = rocksdb::BytewiseComparator();
+
+    // Define the column families. The first element is the default column
+    // family.
+    std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
+    column_families.push_back(rocksdb::ColumnFamilyDescriptor(
+        rocksdb::kDefaultColumnFamilyName, rocksdb::ColumnFamilyOptions()));
+    column_families.push_back(
+        rocksdb::ColumnFamilyDescriptor("inode", cf_options));
+    column_families.push_back(
+        rocksdb::ColumnFamilyDescriptor("dentry", cf_options));
+    column_families.push_back(
+        rocksdb::ColumnFamilyDescriptor("nodes", cf_options));
+
+    std::vector<rocksdb::ColumnFamilyHandle *> handles;
+    rocksdb::Status status = rocksdb::DB::Open(options, "/tmp/torchdb",
+                                               column_families, &handles, &db_);
     if (!status.ok()) {
         throw std::runtime_error("Failed to open RocksDB: " +
                                  status.ToString());
     }
 
-    rocksdb::ColumnFamilyOptions cf_options;
-    cf_options.comparator = rocksdb::BytewiseComparator();
+    // Map the handles to the corresponding member variables.
+    // Assuming order: 0 => default, 1 => inode, 2 => dentry, 3 => nodes
+    cf_inode_ = handles[1];
+    cf_dentry_ = handles[2];
+    cf_nodes_ = handles[3];
 
-    // create the inode column family
-    status = db_->CreateColumnFamily(cf_options, "inode", &cf_inode_);
-    if (!status.ok()) {
-        throw std::runtime_error("Failed to create column family: " +
-                                 status.ToString());
-    }
-
-    // create the dentry column family
-    status = db_->CreateColumnFamily(cf_options, "dentry", &cf_dentry_);
-    if (!status.ok()) {
-        throw std::runtime_error("Failed to create column family: " +
-                                 status.ToString());
-    }
-
-    // create the nodes column family
-    status = db_->CreateColumnFamily(cf_options, "nodes", &cf_nodes_);
-    if (!status.ok()) {
-        throw std::runtime_error("Failed to create column family: " +
-                                 status.ToString());
+    // check if the root inode exists
+    rocksdb::ReadOptions read_options;
+    std::string value;
+    rocksdb::Slice key("1");
+    status = db_->Get(read_options, cf_inode_, key, &value);
+    if (status.IsNotFound()) {
+        this->create_dir(0, "/");
     }
 }
 
@@ -96,24 +106,32 @@ FileInfo MetadataStorage::open(const uint64_t &inode) {
     return file_info;
 }
 
-Status MetadataStorage::create_file(const uint64_t &p_inode,
-                                    const std::string &name) {
+std::pair<Status, Attributes>
+MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
     attr.set_inode(next_inode_++);
     attr.set_size(0);
     attr.set_path(name);
     attr.set_creation_time(time(nullptr));
+    attr.set_modification_time(time(nullptr));
+    attr.set_access_time(time(nullptr));
+    attr.set_user_id(0);  // Set the user ID as needed
+    attr.set_group_id(0); // Set the group ID as needed
+    attr.set_mode(S_IFREG |
+                  (attr.mode() & 0777)); // Set the file mode (e.g., 0644)
 
     std::string value;
     if (!attr.SerializeToString(&value)) {
-        return Status::IOError("Failed to serialize Attributes");
+        return {Status::IOError("Failed to serialize Attributes"), attr};
     }
 
     rocksdb::WriteOptions write_options;
     rocksdb::Slice key(std::to_string(attr.inode()));
     rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
     if (!status.ok()) {
-        return Status::IOError("Failed to create file: " + status.ToString());
+        return {Status::IOError("Failed to create file inode: " +
+                                status.ToString()),
+                attr};
     }
 
     // Create a new directory entry in the dentry column family
@@ -122,58 +140,71 @@ Status MetadataStorage::create_file(const uint64_t &p_inode,
     dirent.set_inode(attr.inode());
 
     if (!dirent.SerializeToString(&value)) {
-        return Status::IOError("Failed to serialize Dirent");
+        return {Status::IOError("Failed to serialize Dirent"), attr};
     }
 
     key = rocksdb::Slice(std::to_string(p_inode) + ":" + name);
     status = db_->Put(write_options, cf_dentry_, key, value);
     if (!status.ok()) {
-        return Status::IOError("Failed to create directory entry: " +
-                               status.ToString());
+        return {Status::IOError("Failed to create directory entry: " +
+                                status.ToString()),
+                attr};
     }
 
     // TODO: Also create a new entry in the nodes column family
 
-    return Status::OK();
+    return {Status::OK(), attr};
 }
 
-Status MetadataStorage::create_dir(const uint64_t &p_inode,
-                                   const std::string &name) {
+std::pair<Status, Attributes>
+MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
     attr.set_inode(next_inode_++);
+    attr.set_size(4096);
     attr.set_path(name);
     attr.set_creation_time(time(nullptr));
+    attr.set_modification_time(time(nullptr));
+    attr.set_access_time(time(nullptr));
+    attr.set_user_id(0);  // Set the user ID as needed
+    attr.set_group_id(0); // Set the group ID as needed
+    attr.set_mode(S_IFDIR |
+                  (attr.mode() & 0777)); // Set the directory mode (e.g., 0755)
 
     std::string value;
     if (!attr.SerializeToString(&value)) {
-        return Status::IOError("Failed to serialize Attributes");
+        return {Status::IOError("Failed to serialize Attributes"), attr};
     }
 
     rocksdb::WriteOptions write_options;
     rocksdb::Slice key(std::to_string(attr.inode()));
     rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
     if (!status.ok()) {
-        return Status::IOError("Failed to create directory: " +
-                               status.ToString());
+        return {
+            Status::IOError("Failed to create directory: " + status.ToString()),
+            attr};
     }
 
-    // Create a new directory entry in the dentry column family
-    Dirent dirent;
-    dirent.set_name(name);
-    dirent.set_inode(attr.inode());
+    // if the p_inode is 0, it means this is the root directory
+    // and we don't need to create a directory entry
+    if (p_inode != 0) {
+        Dirent dirent;
+        dirent.set_name(name);
+        dirent.set_inode(attr.inode());
 
-    if (!dirent.SerializeToString(&value)) {
-        return Status::IOError("Failed to serialize Dirent");
+        if (!dirent.SerializeToString(&value)) {
+            return {Status::IOError("Failed to serialize Dirent"), attr};
+        }
+
+        key = rocksdb::Slice(std::to_string(p_inode) + ":" + name);
+        status = db_->Put(write_options, cf_dentry_, key, value);
+        if (!status.ok()) {
+            return {Status::IOError("Failed to create directory entry: " +
+                                    status.ToString()),
+                    attr};
+        }
     }
 
-    key = rocksdb::Slice(std::to_string(p_inode) + ":" + name);
-    status = db_->Put(write_options, cf_dentry_, key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to create directory entry: " +
-                               status.ToString());
-    }
-
-    return Status::OK();
+    return {Status::OK(), attr};
 }
 
 Status MetadataStorage::remove_file(const uint64_t &p_inode,

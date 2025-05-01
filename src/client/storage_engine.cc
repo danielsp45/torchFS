@@ -39,21 +39,7 @@ Status StorageEngine::is_open(const std::string &path) {
 
 Status StorageEngine::create(const std::string &path, int flags, mode_t mode) {
     auto [s, fh] = namespace_->create_file(path);
-    if (!s.ok()) {
-        return s;
-    }
-    // now open the file with CREATE
-    auto s1 = fh->open(flags, mode);
-    if (!s1.ok()) {
-        return s1;
-    }
-    // since the file is created we can close it
-    auto f2 = fh->close();
-    if (!f2.ok()) {
-        return f2;
-    }
-
-    return Status::OK();
+    return s;
 }
 
 Status StorageEngine::close(std::string &path) {
@@ -79,7 +65,7 @@ Status StorageEngine::remove(const std::string path) {
         return s;
     }
 
-    return fh->remove();
+    return fh->destroy();
 }
 
 Status StorageEngine::read(std::string &path, Slice result, size_t size,
@@ -163,19 +149,19 @@ std::shared_ptr<FileHandle> StorageEngine::lookup_fh(std::string &path) {
 }
 
 Status StorageEngine::getattr(const std::string &path, struct stat *stbuf) {
-    struct stat *buf;
+    struct stat *buf = new struct stat();
     if (namespace_->is_file(path)) {
         auto [s, fh] = namespace_->find_file(path);
         if (!s.ok()) {
             return s;
         }
-        buf = fh->get_meta();
+        fh->getattr(buf);
     } else if (namespace_->is_dir(path)) {
         auto [s, dir] = namespace_->find_dir(path);
         if (!s.ok()) {
             return s;
         }
-        buf = dir->get_meta();
+        dir->getattr(buf);
     } else {
         return Status::NotFound("File or directory not found");
     }
@@ -184,6 +170,7 @@ Status StorageEngine::getattr(const std::string &path, struct stat *stbuf) {
         return Status::IOError("Failed to get directory metadata");
     }
 
+    // print the data inside the buffer
     memcpy(stbuf, buf, sizeof(struct stat));
     delete buf;
     return Status::OK();

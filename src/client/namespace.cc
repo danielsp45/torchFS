@@ -3,9 +3,9 @@
 #include "status.h"
 
 #include <iostream>
+#include <memory>
 
-std::pair<Status, Directory *>
-Namespace::create_dir(const std::string &path) {
+std::pair<Status, Directory *> Namespace::create_dir(const std::string &path) {
     auto [dir_name, new_dir_name] = split_path_from_target(path);
     if (new_dir_name.empty()) {
         return {Status::InvalidArgument("Invalid path"), nullptr};
@@ -46,8 +46,7 @@ Namespace::create_file(const std::string &path) {
     return parent_dir->create_file(file_name);
 }
 
-std::pair<Status, Directory *>
-Namespace::find_dir(const std::string &path) {
+std::pair<Status, Directory *> Namespace::find_dir(const std::string &path) {
     if (path == "/") {
         return {Status::OK(), root_.get()};
     }
@@ -200,7 +199,7 @@ Namespace::list_dirs(const std::string &path) {
 }
 
 Status Namespace::rename_file(const std::string &oldpath,
-                                     const std::string &newpath) {
+                              const std::string &newpath) {
     auto [old_dir_name, old_filename] = split_path_from_target(oldpath);
     auto [new_dir_name, new_filename] = split_path_from_target(newpath);
 
@@ -209,64 +208,93 @@ Status Namespace::rename_file(const std::string &oldpath,
     }
 
     // Get the parent directories
-    auto [s, old_dir_ptr] = find_dir(old_dir_name);
+    auto [s, old_dir] = find_dir(old_dir_name);
     if (!s.ok()) {
         return s;
     }
-    Directory *old_dir = old_dir_ptr;
 
-    auto [s2, new_dir_ptr] = find_dir(new_dir_name);
+    auto [s2, new_dir] = find_dir(new_dir_name);
     if (!s2.ok()) {
         return s2;
     }
-    Directory *new_dir = new_dir_ptr;
 
-    auto [s1, file_handle] = old_dir->remove_file(old_filename);
-    if (!s1.ok()) {
-        return s1;
+    std::shared_ptr<FileHandle> fh = old_dir->get_file(old_filename);
+    if (!fh) {
+        return Status::NotFound("File not found");
     }
-    // Move the file to the new directory
-    Status move_status = new_dir->move_file(file_handle);
+
+    Status move_status = new_dir->move_file(old_dir, fh, new_filename);
     if (!move_status.ok()) {
         return move_status;
     }
+    // auto [s1, file_handle] = old_dir->remove_file(old_filename);
+    // if (!s1.ok()) {
+    //     return s1;
+    // }
+    // // Move the file to the new directory
+    // Status move_status = new_dir->move_file(file_handle);
+    // if (!move_status.ok()) {
+    //     return move_status;
+    // }
 
     return Status::OK();
 }
 
 Status Namespace::rename_dir(const std::string &oldpath,
-                                    const std::string &newpath) {
-    auto [old_dir_name, old_dirname] = split_path_from_target(oldpath);
-    auto [new_dir_name, new_dirname] = split_path_from_target(newpath);
+                             const std::string &newpath) {
+    auto [old_parent_dir_name, old_target_dir_name] =
+        split_path_from_target(oldpath);
+    auto [new_parent_dir_name, new_target_dir_name] =
+        split_path_from_target(newpath);
 
-    if (old_dirname.empty() || new_dirname.empty()) {
+    if (old_target_dir_name.empty() || new_target_dir_name.empty()) {
         return Status::InvalidArgument("Invalid path");
     }
 
-    // Get the parent directories
-    auto [s, old_dir_ptr] = find_dir(old_dir_name);
+    auto [s, old_parent_dir] = find_dir(old_parent_dir_name);
     if (!s.ok()) {
         return s;
     }
-    Directory *old_dir = old_dir_ptr;
 
-    auto [s2, new_dir_ptr] = find_dir(new_dir_name);
+    auto [s2, new_parent_dir] = find_dir(new_parent_dir_name);
     if (!s2.ok()) {
         return s2;
     }
-    Directory *new_dir = new_dir_ptr;
+
+    auto [s3, target_dir] = old_parent_dir->remove_dir(old_target_dir_name);
+    if (!s3.ok()) {
+        return s3;
+    }
+
+    s = new_parent_dir->move_dir(old_parent_dir, std::move(target_dir),
+                                 new_target_dir_name);
+    if (!s.ok()) {
+        return s;
+    }
+
+    // // Get the parent directories
+    // auto [s, old_dir_ptr] = find_dir(old_dir_name);
+    // if (!s.ok()) {
+    //     return s;
+    // }
+    // Directory *old_dir = old_dir_ptr;
+
+    // auto [s2, new_dir] = find_dir(new_dir_name);
+    // if (!s2.ok()) {
+    //     return s2;
+    // }
 
     // Check if the directory exists in the old directory
-    auto [s1, subdir] = old_dir->remove_dir(old_dirname);
-    if (!s1.ok()) {
-        return s1;
-    }
+    // auto [s1, subdir] = old_dir->remove_dir(old_dirname);
+    // if (!s1.ok()) {
+    //     return s1;
+    // }
 
-    // Move the directory to the new directory
-    Status move_status = new_dir->move_dir(std::move(subdir));
-    if (!move_status.ok()) {
-        return move_status;
-    }
+    // // Move the directory to the new directory
+    // Status move_status = new_dir->move_dir(std::move(subdir));
+    // if (!move_status.ok()) {
+    //     return move_status;
+    // }
 
     return Status::OK();
 }

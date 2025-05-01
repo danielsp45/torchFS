@@ -3,6 +3,7 @@
 
 #include "directory.h"
 #include "file_handle.h"
+#include "metadata.h"
 #include "status.h"
 
 #include <memory>
@@ -11,8 +12,16 @@
 class Namespace {
   public:
     Namespace(const std::string &mount_path)
-        : root_(std::make_unique<Directory>("/", mount_path)),
-          mount_path_(mount_path) {}
+        : root_(std::make_unique<Directory>(
+              0, 1, "/", mount_path, std::make_shared<MetadataStorage>())),
+          mount_path_(mount_path) {
+        // Initialize the root directory
+        auto status = root_->init();
+        if (!status.ok()) {
+            throw std::runtime_error("Failed to initialize root directory");
+        }
+    }
+
     ~Namespace() {}
 
     // Create a new directory

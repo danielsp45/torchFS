@@ -1,9 +1,10 @@
+#pragma once
+
 #include "attributes.pb.h"
 
 #include "rocksdb/db.h"
 #include "status.h"
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 class MetadataStorage {
@@ -15,8 +16,10 @@ class MetadataStorage {
     std::vector<Dirent> readdir(const uint64_t &inode);
     FileInfo open(const uint64_t &inode);
 
-    Status create_file(const uint64_t &p_inode, const std::string &name);
-    Status create_dir(const uint64_t &p_inode, const std::string &name);
+    std::pair<Status, Attributes> create_file(const uint64_t &p_inode,
+                                              const std::string &name);
+    std::pair<Status, Attributes> create_dir(const uint64_t &p_inode,
+                                             const std::string &name);
 
     Status remove_file(const uint64_t &p_inode, const uint64_t &inode);
     Status remove_dir(const uint64_t &inode);
