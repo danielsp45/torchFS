@@ -231,8 +231,8 @@ int torch_release(const char *path, struct fuse_file_info *fi) {
 
 // Removed static for external linkage.
 int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
-    // std::cout << "[LOG] fsync " << path << std::endl;
-    // (void)fi;
+    std::cout << "[LOG] fsync " << path << std::endl;
+    (void)fi;
     // auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     // std::string logic_path = se->get_logic_path(path);
 
