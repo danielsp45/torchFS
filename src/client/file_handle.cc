@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "attributes.pb.h"
 #include "file_handle.h"
 #include "slice.h"
 #include "util.h"
@@ -24,7 +25,7 @@ Status FileHandle::init() {
 Status FileHandle::destroy() {
     // TODO: the file removal should be done only when there's no more open's
 
-    auto s = metadata_->remove_file(p_inode_, inode_);
+    auto s = metadata_->remove_file(p_inode_, inode_, filename(logic_path_));
     if (!s.ok()) {
         return s;
     }
@@ -33,6 +34,8 @@ Status FileHandle::destroy() {
     std::string path = join_paths(mount_path_, inode_str);
     if (::access(path.c_str(), F_OK) == -1) {
         // if the file doesn't exist, we don't need to remove it from the disk
+        std::cout << "File does not exist, no need to remove it from disk."
+                  << std::endl;
         return Status::OK();
     }
 
@@ -40,6 +43,8 @@ Status FileHandle::destroy() {
         return Status::IOError("Failed to remove file: " +
                                std::string(strerror(errno)));
     }
+    std::cout << "File removed from disk: inode -> " << inode_ << std::endl;
+
     return Status::OK();
 }
 
@@ -48,7 +53,7 @@ Status FileHandle::open(int flags, mode_t mode) {
     std::string path = join_paths(mount_path_, inode_str);
 
     // if the file doesn't exist, create it
-    if (fd_ == -1) {
+    if (::access(path.c_str(), F_OK) == -1) {
         // File does not exist, create it
         fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
         if (fd_ == -1) {
@@ -71,7 +76,7 @@ Status FileHandle::open(int flags) {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     // if the file doesn't exist, create it
-    if (fd_ == -1) {
+    if (::access(path.c_str(), F_OK) == -1) {
         // File does not exist, create it
         fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
         if (fd_ == -1) {
@@ -155,6 +160,18 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
         return Status::IOError("Failed to write file: " +
                                std::string(strerror(errno)));
     }
+
+    Attributes attr = metadata_->getattr(inode_).second;
+    // update the file size and modification time
+    attr.set_size(attr.size() + count);
+    attr.set_modification_time(time(nullptr));
+    attr.set_access_time(time(nullptr));
+
+    Status s = setattr(attr);
+    if (!s.ok()) {
+        return s;
+    }
+
     return Status::OK();
 }
 
@@ -165,6 +182,15 @@ Status FileHandle::sync() {
     if (::fsync(fd_) == -1) {
         return Status::IOError("Failed to flush file: " +
                                std::string(strerror(errno)));
+    }
+    return Status::OK();
+}
+
+Status FileHandle::setattr(Attributes &attr) {
+    // Update the file attributes in the metadata service.
+    auto s = metadata_->setattr(inode_, attr);
+    if (!s.ok()) {
+        return s;
     }
     return Status::OK();
 }

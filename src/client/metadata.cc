@@ -216,7 +216,8 @@ MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
 }
 
 Status MetadataStorage::remove_file(const uint64_t &p_inode,
-                                    const uint64_t &inode) {
+                                    const uint64_t &inode,
+                                    const std::string &name) {
     // Remove the file from the inode column family
     rocksdb::WriteOptions write_options;
     rocksdb::Slice key(std::to_string(inode));
@@ -226,8 +227,7 @@ Status MetadataStorage::remove_file(const uint64_t &p_inode,
     }
 
     // Remove the directory entry from the dentry column family
-    std::string dentry_key =
-        std::to_string(p_inode) + ":" + std::to_string(inode);
+    std::string dentry_key = std::to_string(p_inode) + ":" + name;
     status = db_->Delete(write_options, cf_dentry_, dentry_key);
     if (!status.ok()) {
         return Status::IOError("Failed to remove directory entry: " +
@@ -342,6 +342,23 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
     status = db_->Put(write_options, cf_dentry_, new_dentry_key, value);
     if (!status.ok()) {
         return Status::IOError("Failed to create new directory entry: " +
+                               status.ToString());
+    }
+
+    return Status::OK();
+}
+
+Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
+    // Update the file attributes in the inode column family
+    std::string value;
+    if (!attr.SerializeToString(&value)) {
+        return Status::IOError("Failed to serialize Attributes");
+    }
+    rocksdb::WriteOptions write_options;
+    rocksdb::Slice key(std::to_string(inode));
+    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
+    if (!status.ok()) {
+        return Status::IOError("Failed to update file attributes: " +
                                status.ToString());
     }
 

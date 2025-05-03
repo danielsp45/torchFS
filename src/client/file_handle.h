@@ -1,6 +1,7 @@
 #ifndef FILE_HANDLE_H
 #define FILE_HANDLE_H
 
+#include "attributes.pb.h"
 #include "metadata.h"
 #include "slice.h"
 #include "status.h"
@@ -47,6 +48,8 @@ class FileHandle {
     std::string mount_path_; // Local file path for write operations
     std::shared_ptr<MetadataStorage> metadata_; // Metadata storage
     int fd_;                                    // File descriptor
+
+    Status setattr(Attributes &attr);
 };
 
 #endif // FILE_HANDLE_H

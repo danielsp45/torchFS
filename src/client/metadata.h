@@ -21,13 +21,16 @@ class MetadataStorage {
     std::pair<Status, Attributes> create_dir(const uint64_t &p_inode,
                                              const std::string &name);
 
-    Status remove_file(const uint64_t &p_inode, const uint64_t &inode);
+    Status remove_file(const uint64_t &p_inode, const uint64_t &inode,
+                       const std::string &name);
     Status remove_dir(const uint64_t &inode);
 
     Status rename_file(const uint64_t &old_p_inode, const uint64_t &new_p_inode,
                        const uint64_t &inode, const std::string &new_name);
     Status rename_dir(const uint64_t &old_p_inode, const uint64_t &new_p_inode,
                       const uint64_t &inode, const std::string &new_name);
+
+    Status setattr(const uint64_t &inode, const Attributes &attr);
 
   private:
     uint64_t next_inode_ = 1; // Simple inode allocator.

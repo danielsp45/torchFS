@@ -221,6 +221,10 @@ Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
     }
 
     for (const auto &entry : list) {
+        // print the name and inode of the entry
+        std::cout << "Entry: " << entry.name() << ", Inode: " << entry.inode()
+                  << std::endl;
+
         struct stat st;
         memset(&st, 0, sizeof(st));
         st.st_ino = entry.inode();

@@ -20,11 +20,11 @@ include_directories(${FUSE_INCLUDE_DIRS})
 # ──────────────────────────────────────
 # Dependencies from vcpkg
 # ──────────────────────────────────────
-find_package(Protobuf         CONFIG REQUIRED)   # vcpkg’s protobuf 3.11.x
 find_package(gflags           CONFIG REQUIRED)
 find_package(unofficial-brpc  CONFIG REQUIRED)
 find_package(unofficial-braft CONFIG REQUIRED)
 find_package(RocksDB          CONFIG REQUIRED)
+find_package(protobuf         CONFIG REQUIRED)   # vcpkg’s protobuf 3.11.x
 
 # ──────────────────────────────────────
 # Generate protos at build-time
@@ -57,9 +57,9 @@ target_compile_definitions(torchfs PRIVATE
 
 target_link_libraries(torchfs PRIVATE
     ${FUSE_LIBRARIES}
-    protobuf::libprotobuf
     gflags::gflags
     unofficial::brpc::brpc-static
+    protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
     RocksDB::rocksdb)
 
 # ──────────────────────────────────────
