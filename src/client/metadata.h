@@ -12,9 +12,9 @@ class MetadataStorage {
     MetadataStorage();
     ~MetadataStorage() = default;
 
-    Attributes getattr(const uint64_t &inode);
-    std::vector<Dirent> readdir(const uint64_t &inode);
-    FileInfo open(const uint64_t &inode);
+    std::pair<Status, Attributes> getattr(const uint64_t &inode);
+    std::pair<Status, std::vector<Dirent>> readdir(const uint64_t &inode);
+    std::pair<Status, FileInfo> open(const uint64_t &inode);
 
     std::pair<Status, Attributes> create_file(const uint64_t &p_inode,
                                               const std::string &name);

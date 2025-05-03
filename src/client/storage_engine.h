@@ -1,9 +1,9 @@
 #ifndef STORAGE_ENGINE_H
 #define STORAGE_ENGINE_H
 
-#include "namespace.h"
 #include "file_handle.h"
 #include "fuse.h"
+#include "namespace.h"
 #include "status.h"
 
 #include <cstdint>
@@ -21,7 +21,6 @@ class StorageEngine {
     Status init();
 
     Status open(const std::string &path, int flagse);
-    Status is_open(const std::string &path);
     Status create(const std::string &path, int flags, mode_t mode);
     Status close(std::string &path);
     Status remove(const std::string path);
@@ -39,7 +38,6 @@ class StorageEngine {
 
   private:
     std::unique_ptr<Namespace> namespace_;
-    std::map<std::string, std::shared_ptr<FileHandle>> open_files_;
     std::string mount_path_; // Directory for local storage
 
     std::string register_fh(std::shared_ptr<FileHandle> fh);

@@ -14,22 +14,6 @@
 #include <utility>
 #include <vector>
 
-// Directory::Directory(const uint64_t &p_inode, const std::string &logic_path,
-//                      const std::string &mount_path,
-//                      std::shared_ptr<MetadataStorage> metadata_storage)
-//     : name_(filename(logic_path)), logic_path_(logic_path),
-//       mount_path_(mount_path), subdirs_(), files_(),
-//       metadata_(metadata_storage) {
-//     // send a create dir request to the metadata service
-//     auto [s, attr] = metadata_->create_dir(p_inode, name_);
-//     if (!s.ok()) {
-//         std::cerr << "Failed to create directory in metadata service: "
-//                   << s.ToString() << std::endl;
-//         throw std::runtime_error("Failed to create directory");
-//     }
-//     inode_ = attr.inode();
-// }
-
 Status Directory::init() {
     if (inode_ == -1) {
         // we need to create the file in the metadata too
@@ -40,7 +24,10 @@ Status Directory::init() {
         inode_ = attr.inode();
     } else {
         // we need to read the content of this directory
-        std::vector<Dirent> dirent_list = metadata_->readdir(inode_);
+        auto [s, dirent_list] = metadata_->readdir(inode_);
+        if (!s.ok()) {
+            return s;
+        }
         // for each inode, we need to create a file/directory
         for (const auto &dirent : dirent_list) {
             this->create_inode(dirent.inode(), dirent.name());
@@ -86,10 +73,7 @@ Directory::create_file(const std::string &name) {
     std::string new_path = join_paths(logic_path_, name);
     auto fh = std::make_shared<FileHandle>(inode_, -1, new_path, mount_path_,
                                            metadata_);
-
-    std::cout << "Creating file: " << name << std::endl;
     auto s = fh->init();
-    std::cout << "File created: " << name << std::endl;
     if (!s.ok()) {
         // NOTE: if the file creation fails, since it's a shared_ptr, the
         // the destructor will be called automatically
@@ -128,12 +112,6 @@ Directory::remove_file(const std::string name) {
         return {Status::NotFound("File not found"), nullptr};
     }
     auto fh = it->second;
-
-    // remove the file from the metadata service
-    auto s = metadata_->remove_file(inode_, fh->get_inode());
-    if (!s.ok()) {
-        return {s, nullptr};
-    }
 
     files_.erase(it);
     return {Status::OK(), fh};
@@ -216,7 +194,10 @@ Status Directory::move_dir(Directory *parent_dir,
 
 Status Directory::getattr(struct stat *buf) {
     // Get the file/directory attributes from the metadata service.
-    Attributes attr = metadata_->getattr(inode_);
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
 
     // Transfer the data from Attributes to the stat structure.
     // buf->st_mode = attr.mode(); // e.g., file type and permissions
@@ -234,7 +215,11 @@ Status Directory::getattr(struct stat *buf) {
 
 Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
                           fuse_readdir_flags /*flags*/) {
-    std::vector<Dirent> list = metadata_->readdir(inode_);
+    auto [s, list] = metadata_->readdir(inode_);
+    if (!s.ok()) {
+        return s;
+    }
+
     for (const auto &entry : list) {
         struct stat st;
         memset(&st, 0, sizeof(st));
@@ -251,31 +236,6 @@ Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
     }
 
     return Status::OK();
-
-    // std::string path = join_paths(mount_path_, logic_path_);
-    // DIR *dp = ::opendir(path.c_str());
-    // if (dp == NULL) {
-    //     return Status::IOError("Failed to open directory: " +
-    //                            std::string(strerror(errno)));
-    // }
-
-    // struct dirent *de;
-    // // Iterate over each directory entry.
-    // while ((de = ::readdir(dp)) != NULL) {
-    //     struct stat st;
-    //     memset(&st, 0, sizeof(st));
-    //     st.st_ino = de->d_ino;
-    //     // The mode is derived by shifting the d_type field.
-    //     st.st_mode = de->d_type << 12;
-    //     // Call the filler function; using offset 0 and no extra flags (0).
-    //     if (filler(buf, de->d_name, &st, 0,
-    //                static_cast<fuse_fill_dir_flags>(0))) {
-    //         break;
-    //     }
-    // }
-
-    // closedir(dp);
-    // return Status::OK();
 }
 
 std::vector<std::shared_ptr<FileHandle>> Directory::list_files() {
@@ -308,7 +268,11 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
         return Status::AlreadyExists("Directory already exists");
     }
     // check if the inode is a file or a directory
-    auto attr = metadata_->getattr(inode);
+    auto [s, attr] = metadata_->getattr(inode);
+    if (!s.ok()) {
+        return s;
+    }
+
     if (attr.mode() & S_IFDIR) {
         // it's a directory
         auto new_dir = std::make_unique<Directory>(inode_, inode, name,

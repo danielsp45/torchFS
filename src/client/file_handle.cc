@@ -18,7 +18,6 @@ Status FileHandle::init() {
         }
         inode_ = attr.inode();
     }
-
     return Status::OK();
 }
 
@@ -30,8 +29,14 @@ Status FileHandle::destroy() {
         return s;
     }
 
-    std::string full_path = join_paths(mount_path_, logic_path_);
-    if (::unlink(full_path.c_str()) == -1) {
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    if (::access(path.c_str(), F_OK) == -1) {
+        // if the file doesn't exist, we don't need to remove it from the disk
+        return Status::OK();
+    }
+
+    if (::unlink(path.c_str()) == -1) {
         return Status::IOError("Failed to remove file: " +
                                std::string(strerror(errno)));
     }
@@ -39,40 +44,57 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(int flags, mode_t mode) {
-    if (num_ > 0) {
-        num_++;
-        return Status::OK();
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+
+    // if the file doesn't exist, create it
+    if (fd_ == -1) {
+        // File does not exist, create it
+        fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to create file: " +
+                                   std::string(strerror(errno)));
+        }
     } else {
-        std::string full_path = join_paths(mount_path_, logic_path_);
-        fd_ = ::open(full_path.c_str(), flags, mode);
+        // File exists, open it
+        fd_ = ::open(path.c_str(), flags);
         if (fd_ == -1) {
             return Status::IOError("Failed to open file: " +
                                    std::string(strerror(errno)));
         }
-        return Status::OK();
     }
+
+    return Status::OK();
 }
 
 Status FileHandle::open(int flags) {
-    if (num_ > 0) {
-        num_++;
-        return Status::OK();
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    // if the file doesn't exist, create it
+    if (fd_ == -1) {
+        // File does not exist, create it
+        fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to create file: " +
+                                   std::string(strerror(errno)));
+        }
     } else {
-        std::string full_path = join_paths(mount_path_, logic_path_);
-        fd_ = ::open(full_path.c_str(), flags);
+        // File exists, open it
+        fd_ = ::open(path.c_str(), flags);
         if (fd_ == -1) {
             return Status::IOError("Failed to open file: " +
                                    std::string(strerror(errno)));
         }
-        return Status::OK();
     }
+    return Status::OK();
 }
 
 Status FileHandle::getattr(struct stat *buf) {
     // Get the file/directory attributes from the metadata service.
-    std::cout << "getattr implementation" << std::endl;
-    Attributes attr = metadata_->getattr(inode_);
-    std::cout << "getattr implementation done" << std::endl;
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
 
     // Transfer the data from Attributes to the stat structure.
     // buf->st_mode = attr.mode(); // e.g., file type and permissions
@@ -89,24 +111,26 @@ Status FileHandle::getattr(struct stat *buf) {
 }
 
 Status FileHandle::close() {
-    if (num_ > 1) {
-        num_--;
-        return Status::OK();
-    } else {
-        if (fd_ != -1) {
-            if (::close(fd_) == -1) {
-                return Status::IOError("Failed to close file: " +
-                                       std::string(strerror(errno)));
-            }
-            fd_ = -1;
+    if (fd_ != -1) {
+        if (::close(fd_) == -1) {
+            return Status::IOError("Failed to close file: " +
+                                   std::string(strerror(errno)));
         }
-        return Status::OK();
+        fd_ = -1;
     }
+
+    return Status::OK();
 }
 
 Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
     if (fd_ == -1) {
-        return Status::IOError("File not open");
+        std::string inode_str = std::to_string(inode_);
+        std::string path = join_paths(mount_path_, inode_str);
+        fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
+        }
     }
     ssize_t result = ::pread(fd_, dst.data(), size, offset);
     if (result == -1) {
@@ -118,7 +142,13 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
 
 Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     if (fd_ == -1) {
-        return Status::IOError("File not open");
+        std::string inode_str = std::to_string(inode_);
+        std::string path = join_paths(mount_path_, inode_str);
+        fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
+        }
     }
     ssize_t result = ::pwrite(fd_, src.data(), count, offset);
     if (result == -1) {

@@ -18,7 +18,7 @@ class FileHandle {
                std::string logic_path, std::string mount_path,
                std::shared_ptr<MetadataStorage> metadata)
         : p_inode_(p_inode), inode_(inode), metadata_(metadata),
-          logic_path_(logic_path), mount_path_(mount_path), fd_(-1), num_(0) {}
+          logic_path_(logic_path), mount_path_(mount_path), fd_(-1) {}
 
     ~FileHandle() {}
 
@@ -34,7 +34,6 @@ class FileHandle {
 
     std::string get_logic_path() { return logic_path_; }
     std::string get_name() { return filename(logic_path_); }
-    int get_num() { return num_; }
     uint64_t get_inode() { return inode_; }
     void set_logic_path(const std::string &logic_path) {
         logic_path_ = logic_path;
@@ -48,7 +47,6 @@ class FileHandle {
     std::string mount_path_; // Local file path for write operations
     std::shared_ptr<MetadataStorage> metadata_; // Metadata storage
     int fd_;                                    // File descriptor
-    int num_;                                   // Number of open file handles
 };
 
 #endif // FILE_HANDLE_H

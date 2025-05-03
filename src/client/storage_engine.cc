@@ -21,20 +21,11 @@ Status StorageEngine::open(const std::string &path, int flags) {
     if (!fh) {
         return Status::NotFound("File not found");
     }
-    register_fh(fh);
     s = fh->open(flags);
     if (!s.ok()) {
         return s;
     }
     return Status::OK();
-}
-
-Status StorageEngine::is_open(const std::string &path) {
-    auto it = open_files_.find(path);
-    if (it != open_files_.end()) {
-        return Status::OK();
-    }
-    return Status::NotFound("File not found");
 }
 
 Status StorageEngine::create(const std::string &path, int flags, mode_t mode) {
@@ -43,26 +34,29 @@ Status StorageEngine::create(const std::string &path, int flags, mode_t mode) {
 }
 
 Status StorageEngine::close(std::string &path) {
-    // Retrieve the file handle from the open_files_ map.
-    std::shared_ptr<FileHandle> fh = lookup_fh(path);
-    if (!fh) {
-        return Status::NotFound("Invalid file handle");
-    }
-
-    Status s = fh->close();
+    auto [s, fh] = namespace_->find_file(path);
     if (!s.ok()) {
         return s;
     }
 
-    open_files_.erase(path);
+    Status s1 = fh->close();
+    if (!s1.ok()) {
+        return s;
+    }
 
     return Status::OK();
 }
 
 Status StorageEngine::remove(const std::string path) {
-    auto [s, fh] = namespace_->find_file(path);
-    if (!s.ok()) {
-        return s;
+    auto [dir_name, file_name] = split_path_from_target(path);
+    auto [s1, dir] = namespace_->find_dir(dir_name);
+    if (!s1.ok()) {
+        return s1;
+    }
+
+    auto [s2, fh] = dir->remove_file(file_name);
+    if (!s2.ok()) {
+        return s2;
     }
 
     return fh->destroy();
@@ -70,12 +64,12 @@ Status StorageEngine::remove(const std::string path) {
 
 Status StorageEngine::read(std::string &path, Slice result, size_t size,
                            off_t offset) {
-    std::shared_ptr<FileHandle> fh = lookup_fh(path);
-    if (!fh) {
-        return Status::NotFound("Invalid file handle");
+    auto [s, fh] = namespace_->find_file(path);
+    if (!s.ok()) {
+        return s;
     }
 
-    Status s = fh->read(result, size, offset);
+    s = fh->read(result, size, offset);
     if (!s.ok()) {
         return s;
     }
@@ -85,12 +79,12 @@ Status StorageEngine::read(std::string &path, Slice result, size_t size,
 
 Status StorageEngine::write(std::string &path, Slice data, size_t size,
                             off_t offset) {
-    std::shared_ptr<FileHandle> fh = lookup_fh(path);
-    if (!fh) {
-        return Status::NotFound("Invalid file handle");
+    auto [s, fh] = namespace_->find_file(path);
+    if (!s.ok()) {
+        return s;
     }
 
-    Status s = fh->write(data, size, offset);
+    s = fh->write(data, size, offset);
     if (!s.ok()) {
         return s;
     }
@@ -132,20 +126,6 @@ Status StorageEngine::rmdir(const std::string &path) {
     }
     dir->destroy();
     return s;
-}
-
-std::string StorageEngine::register_fh(std::shared_ptr<FileHandle> fh) {
-    std::string path = fh->get_logic_path();
-    open_files_[path] = fh;
-    return path;
-}
-
-std::shared_ptr<FileHandle> StorageEngine::lookup_fh(std::string &path) {
-    auto it = open_files_.find(path);
-    if (it != open_files_.end()) {
-        return it->second;
-    }
-    return nullptr;
 }
 
 Status StorageEngine::getattr(const std::string &path, struct stat *stbuf) {

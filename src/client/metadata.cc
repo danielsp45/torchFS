@@ -45,14 +45,19 @@ MetadataStorage::MetadataStorage() {
     }
 }
 
-Attributes MetadataStorage::getattr(const uint64_t &inode) {
+std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
     // Get the file from the inode column family
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
     rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
     if (!status.ok()) {
-        throw std::runtime_error("Failed to get inode: " + status.ToString());
+        if (status.IsNotFound()) {
+            return {Status::NotFound("File not found"), Attributes()};
+        }
+        return {
+            Status::IOError("Failed to get file info: " + status.ToString()),
+            Attributes()};
     }
 
     // Deserialize the value into an Attributes object
@@ -61,10 +66,11 @@ Attributes MetadataStorage::getattr(const uint64_t &inode) {
         throw std::runtime_error("Failed to deserialize Attributes");
     }
 
-    return attr;
+    return {Status::OK(), attr};
 }
 
-std::vector<Dirent> MetadataStorage::readdir(const uint64_t &inode) {
+std::pair<Status, std::vector<Dirent>>
+MetadataStorage::readdir(const uint64_t &inode) {
     // Get the directory entries from the dentry column family
     std::string prefix = std::to_string(inode) + ":";
     std::vector<Dirent> dirents;
@@ -78,23 +84,27 @@ std::vector<Dirent> MetadataStorage::readdir(const uint64_t &inode) {
          it->Next()) {
         Dirent dirent;
         if (!dirent.ParseFromString(it->value().ToString())) {
-            throw std::runtime_error("Failed to deserialize Dirent");
+            return {Status::IOError("Failed to deserialize Dirent"), {}};
         }
         dirents.push_back(dirent);
     }
 
-    return dirents;
+    return {Status::OK(), dirents};
 }
 
-FileInfo MetadataStorage::open(const uint64_t &inode) {
+std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {
     // Get the file info from the nodes column family
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
     rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
     if (!status.ok()) {
-        throw std::runtime_error("Failed to get file info: " +
-                                 status.ToString());
+        if (status.IsNotFound()) {
+            return {Status::NotFound("File not found"), FileInfo()};
+        }
+        return {
+            Status::IOError("Failed to get file info: " + status.ToString()),
+            FileInfo()};
     }
 
     // Deserialize the value into a FileInfo object
@@ -103,7 +113,7 @@ FileInfo MetadataStorage::open(const uint64_t &inode) {
         throw std::runtime_error("Failed to deserialize FileInfo");
     }
 
-    return file_info;
+    return {Status::OK(), file_info};
 }
 
 std::pair<Status, Attributes>
@@ -115,10 +125,9 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
     attr.set_creation_time(time(nullptr));
     attr.set_modification_time(time(nullptr));
     attr.set_access_time(time(nullptr));
-    attr.set_user_id(0);  // Set the user ID as needed
-    attr.set_group_id(0); // Set the group ID as needed
-    attr.set_mode(S_IFREG |
-                  (attr.mode() & 0777)); // Set the file mode (e.g., 0644)
+    attr.set_user_id(0);           // Set the user ID as needed
+    attr.set_group_id(0);          // Set the group ID as needed
+    attr.set_mode(S_IFREG | 0644); // Set the file mode (e.g., 0644)
 
     std::string value;
     if (!attr.SerializeToString(&value)) {
@@ -165,10 +174,9 @@ MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
     attr.set_creation_time(time(nullptr));
     attr.set_modification_time(time(nullptr));
     attr.set_access_time(time(nullptr));
-    attr.set_user_id(0);  // Set the user ID as needed
-    attr.set_group_id(0); // Set the group ID as needed
-    attr.set_mode(S_IFDIR |
-                  (attr.mode() & 0777)); // Set the directory mode (e.g., 0755)
+    attr.set_user_id(0);           // Set the user ID as needed
+    attr.set_group_id(0);          // Set the group ID as needed
+    attr.set_mode(S_IFDIR | 0644); // Set the directory mode (e.g., 0755)
 
     std::string value;
     if (!attr.SerializeToString(&value)) {
@@ -253,7 +261,10 @@ Status MetadataStorage::rename_file(const uint64_t &old_p_inode,
                                     const std::string &new_name) {
 
     // go to inode entry and change the name of the file
-    Attributes attr = getattr(inode);
+    auto [s, attr] = getattr(inode);
+    if (!s.ok()) {
+        return s;
+    }
     attr.set_path(new_name);
     std::string value;
     if (!attr.SerializeToString(&value)) {
@@ -295,7 +306,10 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
                                    const uint64_t &inode,
                                    const std::string &new_name) {
     // go to inode entry and change the name of the file
-    Attributes attr = getattr(inode);
+    auto [s, attr] = getattr(inode);
+    if (!s.ok()) {
+        return s;
+    }
     attr.set_path(new_name);
     std::string value;
     if (!attr.SerializeToString(&value)) {

@@ -36,6 +36,8 @@ int torch_write(const char *path, const char *buf, size_t size, off_t offset,
 int torch_statfs(const char *path, struct statvfs *stbuf);
 int torch_release(const char *path, struct fuse_file_info *fi);
 int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
+int torch_utimens(const char *path, const struct timespec tv[2],
+                  struct fuse_file_info *fi);
 
 static const struct fuse_operations torch_oper = {
     .getattr = torch_getattr,
@@ -71,7 +73,7 @@ static const struct fuse_operations torch_oper = {
     .create = torch_create,
     //.ftruncate = NULL,         // Removed since field no longer exists.
     .lock = NULL,
-    .utimens = NULL,
+    .utimens = torch_utimens,
     .bmap = NULL,
     .ioctl = NULL,
     .poll = NULL,
