@@ -239,7 +239,9 @@ Status MetadataStorage::remove_file(const uint64_t &p_inode,
     return Status::OK();
 }
 
-Status MetadataStorage::remove_dir(const uint64_t &inode) {
+Status MetadataStorage::remove_dir(const uint64_t &p_inode,
+                                   const uint64_t &inode,
+                                   const std::string &name) {
     // Remove the directory from the inode column family
     rocksdb::WriteOptions write_options;
     rocksdb::Slice key(std::to_string(inode));
@@ -249,8 +251,13 @@ Status MetadataStorage::remove_dir(const uint64_t &inode) {
                                status.ToString());
     }
 
-    // INFO: Since every file is removed before removing the directory, we don't
-    // need to remove the dentry entry
+    // Remove the directory entry from the dentry column family
+    std::string dentry_key = std::to_string(p_inode) + ":" + name;
+    status = db_->Delete(write_options, cf_dentry_, dentry_key);
+    if (!status.ok()) {
+        return Status::IOError("Failed to remove directory entry: " +
+                               status.ToString());
+    }
 
     return Status::OK();
 }

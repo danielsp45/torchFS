@@ -38,11 +38,33 @@ Status Directory::init() {
 }
 
 Status Directory::destroy() {
-    // Destroy the directory by removing it from the metadata service.
-    auto s = metadata_->remove_dir(inode_);
-    if (!s.ok()) {
-        return s;
+    // destroy all of the files in this directory
+    for (auto &entry : files_) {
+        auto [s1, fh] = remove_file(entry.first);
+        if (!s1.ok()) {
+            return s1;
+        }
+        auto s2 = fh->destroy();
+        if (!s2.ok()) {
+            return s2;
+        }
     }
+
+    // destroy all of the subdirectories in this directory
+    for (auto &entry : subdirs_) {
+        auto [s1, dir] = remove_dir(entry.first);
+        if (!s1.ok()) {
+            return s1;
+        }
+        auto s2 = dir->destroy();
+        if (!s2.ok()) {
+            return s2;
+        }
+    }
+
+    // Destroy the directory by removing it from the metadata service.
+    auto s = metadata_->remove_dir(p_inode_, inode_, filename(logic_path_));
+
     return Status::OK();
 }
 
@@ -130,7 +152,7 @@ Directory::remove_dir(const std::string name) {
     auto dir_ptr = std::move(it->second);
 
     // Remove the directory from the metadata service
-    auto s = metadata_->remove_dir(dir_ptr->get_inode());
+    auto s = metadata_->remove_dir(inode_, dir_ptr->get_inode(), name);
     if (!s.ok()) {
         return {s, nullptr};
     }

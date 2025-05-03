@@ -23,7 +23,8 @@ class MetadataStorage {
 
     Status remove_file(const uint64_t &p_inode, const uint64_t &inode,
                        const std::string &name);
-    Status remove_dir(const uint64_t &inode);
+    Status remove_dir(const uint64_t &p_inode, const uint64_t &inode,
+                      const std::string &name);
 
     Status rename_file(const uint64_t &old_p_inode, const uint64_t &new_p_inode,
                        const uint64_t &inode, const std::string &new_name);
