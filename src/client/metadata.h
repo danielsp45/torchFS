@@ -34,9 +34,10 @@ class MetadataStorage {
     Status setattr(const uint64_t &inode, const Attributes &attr);
 
   private:
-    uint64_t next_inode_ = 1; // Simple inode allocator.
-    rocksdb::DB *db_;         // RocksDB instance for metadata storage.
+    rocksdb::DB *db_; // RocksDB instance for metadata storage.
     rocksdb::ColumnFamilyHandle *cf_inode_;
     rocksdb::ColumnFamilyHandle *cf_dentry_;
     rocksdb::ColumnFamilyHandle *cf_nodes_;
+
+    uint64_t get_and_increment_counter();
 };

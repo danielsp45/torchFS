@@ -62,6 +62,8 @@ class Directory {
 
     Status readdir(void *buf, fuse_fill_dir_t filler, fuse_readdir_flags flags);
 
+    Status utimens(const struct timespec tv[2]);
+
     std::vector<std::shared_ptr<FileHandle>> list_files();
     std::vector<Directory *> list_dirs();
 
@@ -77,6 +79,8 @@ class Directory {
     std::shared_ptr<MetadataStorage> metadata_;
 
     Status create_inode(const uint64_t &inode, const std::string &name);
+
+    Status setattr(Attributes &attr);
 };
 
 #endif // DIRECTORY_H

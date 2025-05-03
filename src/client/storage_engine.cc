@@ -62,17 +62,14 @@ Status StorageEngine::close(std::string &path) {
 
 Status StorageEngine::remove(const std::string path) {
     auto [dir_name, file_name] = split_path_from_target(path);
-    auto [s1, dir] = find_dir(dir_name);
-    if (!s1.ok()) {
-        return s1;
+
+    auto [dir_status, directory] = find_dir(dir_name);
+    if (!dir_status.ok()) {
+        return dir_status;
     }
 
-    auto [s2, fh] = dir->remove_file(file_name);
-    if (!s2.ok()) {
-        return s2;
-    }
-
-    return fh->destroy();
+    auto [remove_status, file_handle] = directory->remove_file(file_name);
+    return remove_status;
 }
 
 Status StorageEngine::read(std::string &path, Slice result, size_t size,
@@ -258,6 +255,26 @@ Status StorageEngine::readdir(const std::string &path, void *buf,
     }
 
     return dir->readdir(buf, filler, flags);
+}
+
+Status StorageEngine::utimens(const std::string &path,
+                              const struct timespec tv[2]) {
+    // check if is file or directory
+    if (is_file(path)) {
+        auto [s, fh] = find_file(path);
+        if (!s.ok()) {
+            return s;
+        }
+        return fh->utimens(tv);
+    } else if (is_dir(path)) {
+        auto [s, dir] = find_dir(path);
+        if (!s.ok()) {
+            return s;
+        }
+        return dir->utimens(tv);
+    }
+
+    return Status::NotFound("File or directory not found");
 }
 
 std::string StorageEngine::get_logic_path(const std::string &path) {

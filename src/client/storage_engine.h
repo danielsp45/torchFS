@@ -39,6 +39,7 @@ class StorageEngine {
                    fuse_readdir_flags flags);
     Status mkdir(const std::string &path, mode_t mode);
     Status rmdir(const std::string &path);
+    Status utimens(const std::string &path, const struct timespec tv[2]);
 
     std::string get_logic_path(const std::string &path);
 

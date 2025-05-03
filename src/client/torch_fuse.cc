@@ -245,4 +245,17 @@ int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
     return 0;
 }
 
-// TODO: implement the utimens function
+int torch_utimens(const char *path, const struct timespec tv[2],
+                  struct fuse_file_info *fi) {
+    std::cout << "[LOG] utimens " << path << std::endl;
+    (void)fi;
+    auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
+    std::string logic_path = se->get_logic_path(path);
+    Status s = se->utimens(logic_path, tv);
+    if (!s.ok()) {
+        std::cerr << "Error updating times: " << s.ToString() << std::endl;
+        return -errno;
+    }
+
+    return 0;
+}

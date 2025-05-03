@@ -115,6 +115,20 @@ Status FileHandle::getattr(struct stat *buf) {
     return Status::OK();
 }
 
+Status FileHandle::utimens(const struct timespec tv[2]) {
+    // Update the file access and modification times.
+    Attributes attr = metadata_->getattr(inode_).second;
+    attr.set_access_time(tv[0].tv_sec);
+    attr.set_modification_time(tv[1].tv_sec);
+
+    Status s = setattr(attr);
+    if (!s.ok()) {
+        return s;
+    }
+
+    return Status::OK();
+}
+
 Status FileHandle::close() {
     if (fd_ != -1) {
         if (::close(fd_) == -1) {
@@ -164,8 +178,8 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     Attributes attr = metadata_->getattr(inode_).second;
     // update the file size and modification time
     attr.set_size(attr.size() + count);
-    attr.set_modification_time(time(nullptr));
-    attr.set_access_time(time(nullptr));
+    // attr.set_modification_time(time(nullptr));
+    // attr.set_access_time(time(nullptr));
 
     Status s = setattr(attr);
     if (!s.ok()) {

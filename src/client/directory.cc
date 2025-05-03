@@ -44,10 +44,7 @@ Status Directory::destroy() {
         if (!s1.ok()) {
             return s1;
         }
-        auto s2 = fh->destroy();
-        if (!s2.ok()) {
-            return s2;
-        }
+        fh->destroy();
     }
 
     // destroy all of the subdirectories in this directory
@@ -56,16 +53,11 @@ Status Directory::destroy() {
         if (!s1.ok()) {
             return s1;
         }
-        auto s2 = dir->destroy();
-        if (!s2.ok()) {
-            return s2;
-        }
+        dir->destroy();
     }
 
     // Destroy the directory by removing it from the metadata service.
-    auto s = metadata_->remove_dir(p_inode_, inode_, filename(logic_path_));
-
-    return Status::OK();
+    return metadata_->remove_dir(p_inode_, inode_, filename(logic_path_));
 }
 
 // Look up an existing file in the directory.
@@ -108,7 +100,7 @@ Directory::create_file(const std::string &name) {
 
 std::pair<Status, Directory *>
 Directory::create_subdirectory(const std::string &name) {
-    if (subdirs_.find(name) != subdirs_.end()) {
+    if (subdirs_.count(name)) {
         return {Status::AlreadyExists("Directory already exists"), nullptr};
     }
 
@@ -117,14 +109,14 @@ Directory::create_subdirectory(const std::string &name) {
                                                mount_path_, metadata_);
     auto s = new_dir->init();
     if (!s.ok()) {
-        // NOTE: if the file creation fails, since it's a shared_ptr, the
-        // the destructor will be called automatically
         return {s, nullptr};
     }
 
+    // take raw pointer before moving
+    Directory *dir_ptr = new_dir.get();
     subdirs_[name] = std::move(new_dir);
 
-    return {Status::OK(), new_dir.get()};
+    return {Status::OK(), dir_ptr};
 }
 
 std::pair<Status, std::shared_ptr<FileHandle>>
@@ -136,7 +128,8 @@ Directory::remove_file(const std::string name) {
     auto fh = it->second;
 
     files_.erase(it);
-    return {Status::OK(), fh};
+
+    return {fh->destroy(), fh};
 }
 
 std::pair<Status, std::unique_ptr<Directory>>
@@ -243,18 +236,16 @@ Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
     }
 
     for (const auto &entry : list) {
-        // print the name and inode of the entry
-        std::cout << "Entry: " << entry.name() << ", Inode: " << entry.inode()
-                  << std::endl;
+        if (files_.find(entry.name()) == files_.end() &&
+            subdirs_.find(entry.name()) == subdirs_.end()) {
+            // create a new file or directory
+            create_inode(entry.inode(), entry.name());
+        }
 
         struct stat st;
         memset(&st, 0, sizeof(st));
         st.st_ino = entry.inode();
-        // The mode is derived by shifting the d_type field.
-        // st.st_mode = entry.mode() << 12;
-        // call a fixed mode for now
         st.st_mode = S_IFREG | 0755; // Regular file with read/write/execute
-        // Call the filler function; using offset 0 and no extra flags (0).
         if (filler(buf, entry.name().c_str(), &st, 0,
                    static_cast<fuse_fill_dir_flags>(0))) {
             break;
@@ -264,10 +255,21 @@ Status Directory::readdir(void *buf, fuse_fill_dir_t filler,
     return Status::OK();
 }
 
+Status Directory::utimens(const struct timespec tv[2]) {
+    // Update the file access and modification times.
+    Attributes attr = metadata_->getattr(inode_).second;
+    attr.set_access_time(tv[0].tv_sec);
+    attr.set_modification_time(tv[1].tv_sec);
+
+    Status s = setattr(attr);
+    if (!s.ok()) {
+        return s;
+    }
+
+    return Status::OK();
+}
+
 std::vector<std::shared_ptr<FileHandle>> Directory::list_files() {
-    // TODO: this operation needs to go to the metadata service
-    // Example:
-    // metadata_service_->readdir(logic_path_);
     std::vector<std::shared_ptr<FileHandle>> files;
     for (auto &entry : files_) {
         files.push_back(entry.second);
@@ -319,5 +321,14 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
         files_[name] = new_file;
     }
 
+    return Status::OK();
+}
+
+Status Directory::setattr(Attributes &attr) {
+    // Update the file attributes in the metadata service.
+    auto s = metadata_->setattr(inode_, attr);
+    if (!s.ok()) {
+        return s;
+    }
     return Status::OK();
 }

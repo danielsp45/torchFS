@@ -32,6 +32,7 @@ class FileHandle {
     Status write(Slice &dst, size_t size, off_t offset);
     Status getattr(struct stat *buf);
     Status sync();
+    Status utimens(const struct timespec tv[2]);
 
     std::string get_logic_path() { return logic_path_; }
     std::string get_name() { return filename(logic_path_); }

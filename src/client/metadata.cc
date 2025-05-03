@@ -1,4 +1,8 @@
 #include "metadata.h"
+#include "attributes.pb.h"
+#include <cstdint>
+#include <iostream>
+#include <string>
 #include <sys/stat.h>
 
 MetadataStorage::MetadataStorage() {
@@ -35,10 +39,24 @@ MetadataStorage::MetadataStorage() {
     cf_dentry_ = handles[2];
     cf_nodes_ = handles[3];
 
+    // get the inode counter
+    // if it doesn't exist, create it
+    std::string value;
+    rocksdb::ReadOptions read_options2;
+    status = db_->Get(read_options2, cf_inode_, "_counter", &value);
+    if (status.IsNotFound()) {
+        rocksdb::WriteOptions write_options;
+        status =
+            db_->Put(write_options, cf_inode_, "_counter", std::to_string(1));
+        if (!status.ok()) {
+            throw std::runtime_error("Failed to create inode counter: " +
+                                     status.ToString());
+        }
+    }
+
     // check if the root inode exists
     rocksdb::ReadOptions read_options;
-    std::string value;
-    rocksdb::Slice key("1");
+    rocksdb::Slice key(std::to_string(1));
     status = db_->Get(read_options, cf_inode_, key, &value);
     if (status.IsNotFound()) {
         this->create_dir(0, "/");
@@ -47,18 +65,22 @@ MetadataStorage::MetadataStorage() {
 
 std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
     // Get the file from the inode column family
+    std::cout << "getattr on inode " << inode << std::endl;
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
     rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
     if (!status.ok()) {
         if (status.IsNotFound()) {
+            std::cout << "NOT FOUND" << std::endl;
             return {Status::NotFound("File not found"), Attributes()};
         }
+        std::cout << "RANDOM PROBLEM" << std::endl;
         return {
             Status::IOError("Failed to get file info: " + status.ToString()),
             Attributes()};
     }
+    std::cout << "KEY WAS FOUND" << std::endl;
 
     // Deserialize the value into an Attributes object
     Attributes attr; // Use the namespace specified in your .proto file
@@ -119,7 +141,9 @@ std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {
 std::pair<Status, Attributes>
 MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
-    attr.set_inode(next_inode_++);
+    uint64_t inode = get_and_increment_counter();
+    std::cout << "Creating file with inode: " << inode << std::endl;
+    attr.set_inode(inode);
     attr.set_size(0);
     attr.set_path(name);
     attr.set_creation_time(time(nullptr));
@@ -168,7 +192,9 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
 std::pair<Status, Attributes>
 MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
-    attr.set_inode(next_inode_++);
+    uint64_t inode = get_and_increment_counter();
+    std::cout << "Creating dir with inode: " << inode << std::endl;
+    attr.set_inode(inode);
     attr.set_size(4096);
     attr.set_path(name);
     attr.set_creation_time(time(nullptr));
@@ -370,4 +396,29 @@ Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
     }
 
     return Status::OK();
+}
+
+uint64_t MetadataStorage::get_and_increment_counter() {
+    // read the current counter, store that value, and increment it
+    rocksdb::ReadOptions read_options;
+    std::string value;
+    rocksdb::Slice key("_counter");
+    rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
+    if (!status.ok()) {
+        if (status.IsNotFound()) {
+            return 0;
+        }
+        throw std::runtime_error("Failed to get counter: " + status.ToString());
+    }
+    uint64_t counter = std::stoull(value);
+    uint64_t new_counter = counter + 1;
+    // write the new counter back to the database
+    rocksdb::WriteOptions write_options;
+    status =
+        db_->Put(write_options, cf_inode_, key, std::to_string(new_counter));
+    if (!status.ok()) {
+        throw std::runtime_error("Failed to increment counter: " +
+                                 status.ToString());
+    }
+    return counter;
 }
