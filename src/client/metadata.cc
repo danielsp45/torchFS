@@ -65,22 +65,18 @@ MetadataStorage::MetadataStorage() {
 
 std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
     // Get the file from the inode column family
-    std::cout << "getattr on inode " << inode << std::endl;
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
     rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
     if (!status.ok()) {
         if (status.IsNotFound()) {
-            std::cout << "NOT FOUND" << std::endl;
             return {Status::NotFound("File not found"), Attributes()};
         }
-        std::cout << "RANDOM PROBLEM" << std::endl;
         return {
             Status::IOError("Failed to get file info: " + status.ToString()),
             Attributes()};
     }
-    std::cout << "KEY WAS FOUND" << std::endl;
 
     // Deserialize the value into an Attributes object
     Attributes attr; // Use the namespace specified in your .proto file
@@ -142,7 +138,6 @@ std::pair<Status, Attributes>
 MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
     uint64_t inode = get_and_increment_counter();
-    std::cout << "Creating file with inode: " << inode << std::endl;
     attr.set_inode(inode);
     attr.set_size(0);
     attr.set_path(name);
@@ -193,7 +188,6 @@ std::pair<Status, Attributes>
 MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
     Attributes attr;
     uint64_t inode = get_and_increment_counter();
-    std::cout << "Creating dir with inode: " << inode << std::endl;
     attr.set_inode(inode);
     attr.set_size(4096);
     attr.set_path(name);

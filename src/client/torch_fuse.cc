@@ -233,14 +233,6 @@ int torch_release(const char *path, struct fuse_file_info *fi) {
 int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
     std::cout << "[LOG] fsync " << path << std::endl;
     (void)fi;
-    // auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
-    // std::string logic_path = se->get_logic_path(path);
-
-    // Status s = se->sync(se->get_logic_path(path));
-    // if (!s.ok()) {
-    //     std::cerr << "Error syncing file: " << s.ToString() << std::endl;
-    //     return -errno;
-    // }
 
     return 0;
 }

@@ -34,8 +34,6 @@ Status FileHandle::destroy() {
     std::string path = join_paths(mount_path_, inode_str);
     if (::access(path.c_str(), F_OK) == -1) {
         // if the file doesn't exist, we don't need to remove it from the disk
-        std::cout << "File does not exist, no need to remove it from disk."
-                  << std::endl;
         return Status::OK();
     }
 
@@ -43,7 +41,6 @@ Status FileHandle::destroy() {
         return Status::IOError("Failed to remove file: " +
                                std::string(strerror(errno)));
     }
-    std::cout << "File removed from disk: inode -> " << inode_ << std::endl;
 
     return Status::OK();
 }
@@ -117,7 +114,6 @@ Status FileHandle::getattr(struct stat *buf) {
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
     // Update the file access and modification times.
-    std::cout << "Updating file times: " << inode_ << std::endl;
     Attributes attr = metadata_->getattr(inode_).second;
     attr.set_access_time(tv[0].tv_sec);
     attr.set_modification_time(tv[1].tv_sec);

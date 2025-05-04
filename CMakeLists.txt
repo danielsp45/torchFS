@@ -29,7 +29,7 @@ find_package(protobuf         CONFIG REQUIRED)   # vcpkg’s protobuf 3.11.x
 # ──────────────────────────────────────
 # Generate protos at build-time
 # ──────────────────────────────────────
-file(GLOB PROTO_FILES "src/include/proto/*.proto")
+file(GLOB PROTO_FILES "src/common/proto/*.proto")
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
 
