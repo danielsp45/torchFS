@@ -1,8 +1,8 @@
 #ifndef FILE_HANDLE_H
 #define FILE_HANDLE_H
 
-#include "attributes.pb.h"
 #include "metadata.h"
+#include "metadata.pb.h"
 #include "slice.h"
 #include "status.h"
 #include "util.h"

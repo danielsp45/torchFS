@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "attributes.pb.h"
 #include "file_handle.h"
 #include "slice.h"
 #include "util.h"

@@ -1,14 +1,15 @@
 #pragma once
 
 #include "metadata.pb.h"
+
+#include "rocksdb/db.h"
 #include "status.h"
-#include <brpc/channel.h>
 #include <cstdint>
 #include <vector>
 
 class MetadataStorage {
   public:
-    MetadataStorage(const std::string &server_address = "127.0.0.1:8000");
+    MetadataStorage();
     ~MetadataStorage() = default;
 
     std::pair<Status, Attributes> getattr(const uint64_t &inode);
@@ -33,6 +34,10 @@ class MetadataStorage {
     Status setattr(const uint64_t &inode, const Attributes &attr);
 
   private:
-    brpc::Channel channel_;
-    MetadataService_Stub *stub_;
+    rocksdb::DB *db_; // RocksDB instance for metadata storage.
+    rocksdb::ColumnFamilyHandle *cf_inode_;
+    rocksdb::ColumnFamilyHandle *cf_dentry_;
+    rocksdb::ColumnFamilyHandle *cf_nodes_;
+
+    uint64_t get_and_increment_counter();
 };

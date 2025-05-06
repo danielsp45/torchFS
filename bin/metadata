@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Go to project root
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+port=8000
+
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script starts the TorchFS metadata server.
+Options:
+  --port=<port>   (ignored: metadata server currently listens on 8000)
+  -h, --help      Show this help message.
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --port=*)
+      port="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      display_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      display_help
+      exit 1
+      ;;
+  esac
+done
+
+echo "Starting metadata server (listening on port ${port})..."
+./build/metadata
