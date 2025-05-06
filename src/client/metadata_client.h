@@ -6,10 +6,10 @@
 #include <cstdint>
 #include <vector>
 
-class MetadataStorage {
+class MetadataClient {
   public:
-    MetadataStorage(const std::string &server_address = "127.0.0.1:8000");
-    ~MetadataStorage() = default;
+    MetadataClient(const std::string &server_address = "127.0.0.1:8000");
+    ~MetadataClient() = default;
 
     std::pair<Status, Attributes> getattr(const uint64_t &inode);
     std::pair<Status, std::vector<Dirent>> readdir(const uint64_t &inode);

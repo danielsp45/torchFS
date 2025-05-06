@@ -1,10 +1,10 @@
-#include "metadata.h"
+#include "metadata_client.h"
 #include <brpc/channel.h>
 #include <google/protobuf/empty.pb.h>
 #include <stdexcept>
 
 // Constructor: initialize BRPC channel and stub
-MetadataStorage::MetadataStorage(const std::string &server_address)
+MetadataClient::MetadataClient(const std::string &server_address)
     : channel_(), stub_(nullptr) {
     brpc::ChannelOptions options;
     options.protocol = "baidu_std";
@@ -18,7 +18,7 @@ MetadataStorage::MetadataStorage(const std::string &server_address)
 }
 
 // getattr → RPC
-std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
+std::pair<Status, Attributes> MetadataClient::getattr(const uint64_t &inode) {
     InodeRequest req;
     req.set_inode(inode);
     Attributes resp;
@@ -31,7 +31,7 @@ std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
 
 // readdir → RPC
 std::pair<Status, std::vector<Dirent>>
-MetadataStorage::readdir(const uint64_t &inode) {
+MetadataClient::readdir(const uint64_t &inode) {
     ReadDirRequest req;
     req.set_inode(inode);
     ReadDirResponse resp;
@@ -46,7 +46,7 @@ MetadataStorage::readdir(const uint64_t &inode) {
 }
 
 // open → RPC
-std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {
+std::pair<Status, FileInfo> MetadataClient::open(const uint64_t &inode) {
     InodeRequest req;
     req.set_inode(inode);
     FileInfo resp;
@@ -59,7 +59,7 @@ std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {
 
 // create_file → RPC
 std::pair<Status, Attributes>
-MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
+MetadataClient::create_file(const uint64_t &p_inode, const std::string &name) {
     CreateRequest req;
     req.set_p_inode(p_inode);
     req.set_name(name);
@@ -73,7 +73,7 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
 
 // create_dir → RPC
 std::pair<Status, Attributes>
-MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
+MetadataClient::create_dir(const uint64_t &p_inode, const std::string &name) {
     CreateRequest req;
     req.set_p_inode(p_inode);
     req.set_name(name);
@@ -86,9 +86,9 @@ MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
 }
 
 // remove_file → RPC
-Status MetadataStorage::remove_file(const uint64_t &p_inode,
-                                    const uint64_t &inode,
-                                    const std::string &name) {
+Status MetadataClient::remove_file(const uint64_t &p_inode,
+                                   const uint64_t &inode,
+                                   const std::string &name) {
     RemoveRequest req;
     req.set_p_inode(p_inode);
     req.set_inode(inode);
@@ -100,9 +100,9 @@ Status MetadataStorage::remove_file(const uint64_t &p_inode,
 }
 
 // remove_dir → RPC
-Status MetadataStorage::remove_dir(const uint64_t &p_inode,
-                                   const uint64_t &inode,
-                                   const std::string &name) {
+Status MetadataClient::remove_dir(const uint64_t &p_inode,
+                                  const uint64_t &inode,
+                                  const std::string &name) {
     RemoveRequest req;
     req.set_p_inode(p_inode);
     req.set_inode(inode);
@@ -114,10 +114,10 @@ Status MetadataStorage::remove_dir(const uint64_t &p_inode,
 }
 
 // rename_file → RPC
-Status MetadataStorage::rename_file(const uint64_t &old_p_inode,
-                                    const uint64_t &new_p_inode,
-                                    const uint64_t &inode,
-                                    const std::string &new_name) {
+Status MetadataClient::rename_file(const uint64_t &old_p_inode,
+                                   const uint64_t &new_p_inode,
+                                   const uint64_t &inode,
+                                   const std::string &new_name) {
     RenameRequest req;
     req.set_old_p_inode(old_p_inode);
     req.set_new_p_inode(new_p_inode);
@@ -130,10 +130,10 @@ Status MetadataStorage::rename_file(const uint64_t &old_p_inode,
 }
 
 // rename_dir → RPC
-Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
-                                   const uint64_t &new_p_inode,
-                                   const uint64_t &inode,
-                                   const std::string &new_name) {
+Status MetadataClient::rename_dir(const uint64_t &old_p_inode,
+                                  const uint64_t &new_p_inode,
+                                  const uint64_t &inode,
+                                  const std::string &new_name) {
     RenameRequest req;
     req.set_old_p_inode(old_p_inode);
     req.set_new_p_inode(new_p_inode);
@@ -146,7 +146,7 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
 }
 
 // setattr → RPC
-Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
+Status MetadataClient::setattr(const uint64_t &inode, const Attributes &attr) {
     Attributes req = attr, resp;
     brpc::Controller cntl;
     stub_->setattr(&cntl, &req, &resp, nullptr);

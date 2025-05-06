@@ -3,7 +3,7 @@
 
 #include "file_handle.h"
 #include "fuse.h"
-#include "metadata.h"
+#include "metadata_client.h"
 #include "status.h"
 
 #include <map>
@@ -15,10 +15,10 @@ class Directory {
   public:
     Directory(const uint64_t &p_inode, const uint64_t &inode,
               const std::string &logic_path, const std::string &mount_path,
-              std::shared_ptr<MetadataStorage> metadata_storage)
+              std::shared_ptr<MetadataClient> metadata_client)
         : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
           mount_path_(mount_path), subdirs_(), files_(),
-          metadata_(metadata_storage) {}
+          metadata_(metadata_client) {}
 
     ~Directory() = default;
 
@@ -76,7 +76,7 @@ class Directory {
         subdirs_; // Subdirectories in the directory
     std::map<std::string, std::shared_ptr<FileHandle>>
         files_; // File handles in the directory
-    std::shared_ptr<MetadataStorage> metadata_;
+    std::shared_ptr<MetadataClient> metadata_;
 
     Status create_inode(const uint64_t &inode, const std::string &name);
 
