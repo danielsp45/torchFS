@@ -1,37 +1,82 @@
 cmake_minimum_required(VERSION 3.12)
 project(TorchFS VERSION 0.1.0 LANGUAGES CXX)
 
-# Export compile commands for clangd
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# Global definitions (ensures all files get it)
-add_definitions(-D_FILE_OFFSET_BITS=64)
-
-# Set C++ standard
+# ──────────────────────────────────────
+# Global compile flags
+# ──────────────────────────────────────
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS  OFF)
+add_definitions(-D_FILE_OFFSET_BITS=64)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Find fuse3 using pkg-config
+# ──────────────────────────────────────
+# FUSE (pkg-config)
+# ──────────────────────────────────────
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FUSE REQUIRED fuse3)
 include_directories(${FUSE_INCLUDE_DIRS})
 
-# Optionally include additional header directories
-include_directories(${CMAKE_SOURCE_DIR}/src/include)
-include_directories(${CMAKE_SOURCE_DIR}/src/client)
+# ──────────────────────────────────────
+# Dependencies from vcpkg
+# ──────────────────────────────────────
+find_package(gflags           CONFIG REQUIRED)
+find_package(unofficial-brpc  CONFIG REQUIRED)
+find_package(unofficial-braft CONFIG REQUIRED)
+find_package(RocksDB          CONFIG REQUIRED)
+find_package(protobuf         CONFIG REQUIRED)   # vcpkg’s protobuf 3.11.x
 
-# Collect all source files in the src/client directory
-file(GLOB CLIENT_SOURCES "${CMAKE_SOURCE_DIR}/src/client/*.cc")
+# ──────────────────────────────────────
+# Generate protos at build-time
+# ──────────────────────────────────────
+file(GLOB PROTO_FILES "src/common/proto/*.proto")
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
-# Collect common sources
-file(GLOB COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/common/*.cc")
 
-# Create the executable including both client and common sources
-add_executable(torchfs ${CLIENT_SOURCES} ${COMMON_SOURCES})
+# ──────────────────────────────────────
+# Source lists
+# ──────────────────────────────────────
+file(GLOB CLIENT_SOURCES   src/client/*.cc)
+file(GLOB METADATA_SOURCES src/metadata/*.cc)
+file(GLOB COMMON_SOURCES   src/common/*.cc)
 
-# Link with fuse libraries found by pkg-config
-target_link_libraries(torchfs ${FUSE_LIBRARIES})
+# ──────────────────────────────────────
+# torchfs (FUSE client) binary
+# ──────────────────────────────────────
+add_executable(torchfs
+    ${CLIENT_SOURCES}
+    ${COMMON_SOURCES}
+    ${PROTO_SRCS})
 
-# Pass any necessary compile definitions (for example, to set FUSE_USE_VERSION)
-target_compile_definitions(torchfs PRIVATE FUSE_USE_VERSION=31 _GNU_SOURCE _FILE_OFFSET_BITS=64)
+target_include_directories(torchfs PRIVATE
+    src/include
+    ${CMAKE_CURRENT_BINARY_DIR})  # Include path for generated protobuf headers
+
+target_compile_definitions(torchfs PRIVATE
+    FUSE_USE_VERSION=30 _GNU_SOURCE _FILE_OFFSET_BITS=64)
+
+target_link_libraries(torchfs PRIVATE
+    ${FUSE_LIBRARIES}
+    gflags::gflags
+    unofficial::brpc::brpc-static
+    protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
+    RocksDB::rocksdb)
+
+# ──────────────────────────────────────
+# metadata (Raft KV) binary
+# ──────────────────────────────────────
+# add_executable(metadata
+#     ${METADATA_SOURCES}
+#     ${KV_SRCS}  ${KV_HDRS})
+
+# include path for generated kv.pb.h
+# target_include_directories(metadata PRIVATE
+#     ${CMAKE_CURRENT_BINARY_DIR}
+#     src/include)
+
+# target_link_libraries(metadata PRIVATE
+#     gflags::gflags
+#     unofficial::brpc::brpc-static
+#     unofficial::braft::braft-static
+#     protobuf::libprotobuf)   # runtime lib
+

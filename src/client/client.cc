@@ -1,5 +1,3 @@
-#define FUSE_USE_VERSION 31
-
 #include "storage_engine.h"
 #include "torch_fuse.h"
 

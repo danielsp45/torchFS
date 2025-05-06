@@ -1,27 +1,32 @@
 #ifndef STORAGE_ENGINE_H
 #define STORAGE_ENGINE_H
 
-#include "namespace.h"
+#include "directory.h"
 #include "file_handle.h"
 #include "fuse.h"
 #include "status.h"
 
-#include <cstdint>
-#include <map>
 #include <memory>
 
 class StorageEngine {
   public:
     StorageEngine(const std::string &mount_path)
-        : namespace_(std::make_unique<Namespace>(mount_path)),
-          mount_path_(mount_path) {}
+        : mount_path_(mount_path),
+          root_(std::make_unique<Directory>(
+              0, 1, "/", mount_path, std::make_shared<MetadataStorage>())) {
+
+        // Initialize the root directory
+        auto status = root_->init();
+        if (!status.ok()) {
+            throw std::runtime_error("Failed to initialize root directory");
+        }
+    }
 
     ~StorageEngine() {}
 
     Status init();
 
     Status open(const std::string &path, int flagse);
-    Status is_open(const std::string &path);
     Status create(const std::string &path, int flags, mode_t mode);
     Status close(std::string &path);
     Status remove(const std::string path);
@@ -34,18 +39,23 @@ class StorageEngine {
                    fuse_readdir_flags flags);
     Status mkdir(const std::string &path, mode_t mode);
     Status rmdir(const std::string &path);
+    Status utimens(const std::string &path, const struct timespec tv[2]);
 
     std::string get_logic_path(const std::string &path);
 
   private:
-    std::unique_ptr<Namespace> namespace_;
-    std::map<std::string, std::shared_ptr<FileHandle>> open_files_;
-    std::string mount_path_; // Directory for local storage
+    std::unique_ptr<Directory> root_; // Root directory
+    std::string mount_path_;          // Directory for local storage
 
     std::string register_fh(std::shared_ptr<FileHandle> fh);
     std::shared_ptr<FileHandle> lookup_fh(std::string &logic_path);
-
     std::shared_ptr<FileHandle> get_file_handle(std::string file_path);
+
+    std::pair<Status, std::shared_ptr<FileHandle>>
+    find_file(const std::string &path);
+    std::pair<Status, Directory *> find_dir(const std::string &path);
+    bool is_file(const std::string &path);
+    bool is_dir(const std::string &path);
 };
 
 #endif // STORAGE_ENGINE_H

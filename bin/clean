@@ -25,8 +25,11 @@ fi
 BUILD_DIR="build"
 
 if [[ -d "${BUILD_DIR}" ]]; then
-  echo "Removing build directory: ${BUILD_DIR}"
-  rm -rf "${BUILD_DIR}" || { echo "Failed to remove build directory"; exit 1; }
+  echo "Cleaning build directory: ${BUILD_DIR}"
+
+  # Find and remove everything except the vcpkg_installed directory
+  find "${BUILD_DIR}" -mindepth 1 -maxdepth 1 ! -name 'vcpkg_installed' -exec rm -rf {} + || { echo "Failed to clean build directory"; exit 1; }
+
   echo "Clean completed successfully."
 else
   echo "Build directory does not exist; nothing to clean."

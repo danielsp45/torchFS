@@ -11,7 +11,7 @@
 int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                   off_t offset, struct fuse_file_info *fi,
                   fuse_readdir_flags flags) {
-    std::cout << "[LOG] readdir" << std::endl;
+    std::cout << "[LOG] readdir" << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->readdir(se->get_logic_path(path), buf, filler, flags);
     if (!s.ok()) {
@@ -23,12 +23,14 @@ int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 // Removed static for external linkage.
 off_t torch_lseek(const char *path, off_t offset, int whence,
-                  struct fuse_file_info *fi) { return -ENOSYS; }
+                  struct fuse_file_info *fi) {
+    return -ENOSYS;
+}
 
 // Removed static for external linkage.
 int torch_getattr(const char *path, struct stat *stbuf,
                   struct fuse_file_info *fi) {
-    std::cout << "[LOG] getattr" << std::endl;
+    std::cout << "[LOG] getattr " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::cout << se->get_logic_path(path) << std::endl;
     Status s = se->getattr(se->get_logic_path(path), stbuf);
@@ -51,7 +53,7 @@ int torch_getattr(const char *path, struct stat *stbuf,
 }
 
 // Removed static for external linkage.
-int torch_access(const char *path, int mask) { 
+int torch_access(const char *path, int mask) {
     return 0; // No access check needed
 }
 
@@ -63,7 +65,7 @@ int torch_mknod(const char *path, mode_t mode, dev_t rdev) { return -ENOSYS; }
 
 // Removed static for external linkage.
 int torch_unlink(const char *path) {
-    std::cout << "[LOG] unlink" << std::endl;
+    std::cout << "[LOG] unlink: " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->remove(se->get_logic_path(path));
     if (s.is_not_found()) {
@@ -96,7 +98,7 @@ int torch_mkdir(const char *path, mode_t mode) {
 
 // Removed static for external linkage.
 int torch_rmdir(const char *path) {
-    std::cout << "[LOG] rmdir" << std::endl;
+    std::cout << "[LOG] rmdir " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     Status s = se->rmdir(se->get_logic_path(path));
     if (!s.ok()) {
@@ -145,7 +147,7 @@ int torch_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
 
 // Removed static for external linkage.
 int torch_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    std::cout << "[LOG] create" << std::endl;
+    std::cout << "[LOG] create " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
@@ -158,9 +160,8 @@ int torch_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     return 0;
 }
 
-// Removed static for external linkage.
 int torch_open(const char *path, struct fuse_file_info *fi) {
-    std::cout << "[LOG] open" << std::endl;
+    std::cout << "[LOG] open" << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
     Status s = se->open(se->get_logic_path(path), fi->flags);
@@ -175,21 +176,10 @@ int torch_open(const char *path, struct fuse_file_info *fi) {
 // Removed static for external linkage.
 int torch_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-    std::cout << "[LOG] read" << std::endl;
+    std::cout << "[LOG] read " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
-
-    //Check if file is open
-    Status open_status = se->is_open(logic_path);
-    //If file is not open, try to open it
-    if(open_status.is_not_found()) {
-        Status status = se->open(logic_path, fi->flags);
-        if(!status.ok()){
-            std::cerr << "Error opening file: " << status.ToString() << std::endl;
-            return -errno;
-        }
-    }
 
     Slice result(buf, size, false);
     Status s = se->read(logic_path, result, size, offset);
@@ -204,21 +194,10 @@ int torch_read(const char *path, char *buf, size_t size, off_t offset,
 // Removed static for external linkage.
 int torch_write(const char *path, const char *buf, size_t size, off_t offset,
                 struct fuse_file_info *fi) {
-    std::cout << "[LOG] write" << std::endl;
+    std::cout << "[LOG] write " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
-
-    //Check if file is open
-    Status open_status = se->is_open(logic_path);
-    //If file is not open, try to open it
-    if(open_status.is_not_found()) {
-        Status status = se->open(logic_path, fi->flags);
-        if(!status.ok()){
-            std::cerr << "Error opening file: " << status.ToString() << std::endl;
-            return -errno;
-        }
-    }
 
     Slice data(buf, size, false);
     Status s = se->write(logic_path, data, size, offset);
@@ -235,41 +214,38 @@ int torch_statfs(const char *path, struct statvfs *stbuf) { return -ENOSYS; }
 
 // Removed static for external linkage.
 int torch_release(const char *path, struct fuse_file_info *fi) {
-    std::cout << "[LOG] release" << std::endl;
+    std::cout << "[LOG] release" << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
 
-    //Check if file is open
-    Status open_status = se->is_open(logic_path);
-    //Error if file is not open
-    if(!open_status.ok()) {
-        std::cerr << "File handle is null" << std::endl;
-        return -EINVAL;
+    // Check if file is open
+    Status status = se->close(logic_path);
+    if (!status.ok()) {
+        std::cerr << status.ToString() << std::endl;
+        return -errno;
     }
-
-    se->close(logic_path);
 
     return 0;
 }
 
 // Removed static for external linkage.
 int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
-    std::cout << "[LOG] fsync" << std::endl;
+    std::cout << "[LOG] fsync " << path << std::endl;
+    (void)fi;
+
+    return 0;
+}
+
+int torch_utimens(const char *path, const struct timespec tv[2],
+                  struct fuse_file_info *fi) {
+    std::cout << "[LOG] utimens " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
-
-    //Check if file is open
-    Status open_status = se->is_open(logic_path);
-    if (!open_status.ok()) {
-        std::cerr << "File handle is null" << std::endl;
-        return -EINVAL;
-    }
-
-    Status s = se->sync(se->get_logic_path(path));
+    Status s = se->utimens(logic_path, tv);
     if (!s.ok()) {
-        std::cerr << "Error syncing file: " << s.ToString() << std::endl;
+        std::cerr << "Error updating times: " << s.ToString() << std::endl;
         return -errno;
     }
 

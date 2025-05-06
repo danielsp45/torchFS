@@ -37,12 +37,23 @@ fi
 # Change into the build directory.
 cd "${BUILD_DIR}" || exit 127
 
+# Define the vcpkg toolchain file path.
+VCPKG_TOOLCHAIN_FILE="/home/vagrant/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
 # Run CMake to configure the project.
-echo "Running cmake .."
-cmake .. || { echo "cmake configuration failed"; exit 1; }
+echo "Running cmake with vcpkg: cmake -DCMAKE_TOOLCHAIN_FILE=${VCPKG_TOOLCHAIN_FILE} -DVCPKG_MANIFEST_MODE=enabled .."
+cmake \
+  -DCMAKE_TOOLCHAIN_FILE="${VCPKG_TOOLCHAIN_FILE}" \
+  -DVCPKG_MANIFEST_MODE=enabled \
+  .. || { echo "cmake configuration failed"; exit 1; }
+cmake -S .. -B ../build \
+  -DCMAKE_TOOLCHAIN_FILE=/home/vagrant/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_MANIFEST_MODE=enabled
+
 
 # Build the project using make with all available cores.
-echo "Running make -j"
-make -j || { echo "make build failed"; exit 1; }
+echo "Running cmake --build build"
+cmake --build ../build
+
 
 echo "Build completed successfully."
