@@ -58,10 +58,6 @@ message RenameRequest {
   required string new_name    = 4;
 }
 
-message EchoMessage {
-  required string message = 1;
-}
-
 service MetadataService {
   rpc getattr     (InodeRequest)   returns (Attributes);
   rpc setattr     (Attributes)     returns (Attributes);
