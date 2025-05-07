@@ -1,0 +1,72 @@
+syntax = "proto2";
+
+option cc_generic_services = true;
+
+import "google/protobuf/empty.proto";
+
+/// File metadata and directory‐entry messages
+message Attributes {
+  required uint64 inode             = 1;
+  required string path              = 2;
+  required uint64 size              = 3;
+  required uint64 creation_time     = 4;
+  required uint64 modification_time = 5;
+  required uint64 access_time       = 6;
+  required uint64 mode              = 7;
+  required uint64 user_id           = 8;
+  required uint64 group_id          = 9;
+}
+
+message Dirent {
+  required uint64 inode = 1;
+  required string name  = 2;
+}
+
+message FileInfo {
+  required uint64 inode         = 1;
+  repeated string chunk_nodes   = 2;
+  repeated string parity_nodes  = 3;
+}
+
+/// Service‐level RPCs for metadata
+message InodeRequest {
+  required uint64 inode = 1;
+}
+
+message ReadDirRequest {
+  required uint64 inode = 1;
+}
+message ReadDirResponse {
+  repeated Dirent entries = 1;
+}
+
+message CreateRequest {
+  required uint64 p_inode = 1;
+  required string name    = 2;
+}
+
+message RemoveRequest {
+  required uint64 p_inode = 1;
+  required uint64 inode   = 2;
+  required string name    = 3;
+}
+
+message RenameRequest {
+  required uint64 old_p_inode = 1;
+  required uint64 new_p_inode = 2;
+  required uint64 inode       = 3;
+  required string new_name    = 4;
+}
+
+service MetadataService {
+  rpc getattr     (InodeRequest)   returns (Attributes);
+  rpc setattr     (Attributes)     returns (Attributes);
+  rpc readdir     (ReadDirRequest) returns (ReadDirResponse);
+  rpc createfile  (CreateRequest)  returns (Attributes);
+  rpc createdir   (CreateRequest)  returns (Attributes);
+  rpc removefile  (RemoveRequest)  returns (google.protobuf.Empty);
+  rpc removedir   (RemoveRequest)  returns (google.protobuf.Empty);
+  rpc renamefile  (RenameRequest)  returns (google.protobuf.Empty);
+  rpc renamedir   (RenameRequest)  returns (google.protobuf.Empty);
+  rpc open        (InodeRequest)   returns (FileInfo);
+}

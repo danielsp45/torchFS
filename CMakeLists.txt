@@ -32,7 +32,6 @@ find_package(protobuf         CONFIG REQUIRED)   # vcpkg’s protobuf 3.11.x
 file(GLOB PROTO_FILES "src/common/proto/*.proto")
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
-
 # ──────────────────────────────────────
 # Source lists
 # ──────────────────────────────────────
@@ -65,18 +64,18 @@ target_link_libraries(torchfs PRIVATE
 # ──────────────────────────────────────
 # metadata (Raft KV) binary
 # ──────────────────────────────────────
-# add_executable(metadata
-#     ${METADATA_SOURCES}
-#     ${KV_SRCS}  ${KV_HDRS})
+add_executable(metadata
+    ${METADATA_SOURCES}
+    ${COMMON_SOURCES}
+    ${PROTO_SRCS})
 
-# include path for generated kv.pb.h
-# target_include_directories(metadata PRIVATE
-#     ${CMAKE_CURRENT_BINARY_DIR}
-#     src/include)
+target_include_directories(metadata PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    src/include)
 
-# target_link_libraries(metadata PRIVATE
-#     gflags::gflags
-#     unofficial::brpc::brpc-static
-#     unofficial::braft::braft-static
-#     protobuf::libprotobuf)   # runtime lib
-
+target_link_libraries(metadata PRIVATE
+    gflags::gflags
+    unofficial::brpc::brpc-static
+    protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
+    RocksDB::rocksdb
+)
