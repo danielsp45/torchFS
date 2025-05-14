@@ -71,7 +71,7 @@ After evaluation, we found the PyTorch access pattern to be as follows:
 - The GPUs then start reading from the first file sequentially, in a first-come-first-serve manner, until the end of the file is reached.
   - When the file is a chunk long, each GPU uses a file
 - When a file is fully read, it is closed, a new one (that is after the first few that were opened at the start) is opened and its first chunks read, and the next file in the order is fully read.
-- When all files are fulle read, the epoch ends.
+- When all files are fully read, the epoch ends.
 - After each epoch, a small number files are opened and read sequentially, presumable for validation purposes.
 - A new epoch starts and the process repeats.
 
