@@ -55,9 +55,9 @@ This design ensures that TorchFS can handle the unique demands of DL workloads, 
 
 = Background and Challenges
 
-We aimed to develop a filesystem that was optimized for the specific needs of machine learning workloads, particularly for use with the PyTorch framework. Therefore, we needed to consider the unique characteristics of these workloads and how they differ from traditional file systems.
+We aimed to develop a filesystem that was optimized for the specific needs of ML workloads, particularly for use with the PyTorch framework. Therefore, we needed to consider the unique characteristics of these workloads and how they differ from traditional file systems.
 
-Traditional file systems are designed to handle a wide variety of workloads, including random access patterns, small file sizes, and a mix of read and write operations. However, machine learning workloads often involve large datasets that are accessed in a more predictable manner, with the bulk of the load coming from reading training files. This means we can tailor our filesystem to better suit these workloads using optimizations.
+Traditional file systems are designed to handle a wide variety of workloads, including random access patterns, small file sizes, and a mix of read and write operations. However, ML workloads often involve large datasets that are accessed in a more predictable manner, with the bulk of the load coming from reading training files. This means we can tailor our filesystem to better suit these workloads using optimizations.
 
 == PyTorch Access Patterns
 
