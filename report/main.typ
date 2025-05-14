@@ -55,11 +55,35 @@ This design ensures that TorchFS can handle the unique demands of DL workloads, 
 
 = Background and Challenges
 
-#lorem(100)
+We aimed to develop a filesystem that was optimized for the specific needs of machine learning workloads, particularly for use with the PyTorch framework. Therefore, we needed to consider the unique characteristics of these workloads and how they differ from traditional file systems.
 
-== Sub Motivation 1
+Traditional file systems are designed to handle a wide variety of workloads, including random access patterns, small file sizes, and a mix of read and write operations. However, machine learning workloads often involve large datasets that are accessed in a more predictable manner, with the bulk of the load coming from reading training files. This means we can tailor our filesystem to better suit these workloads using optimizations.
 
-#lorem(200)
+== PyTorch Access Patterns
+
+To know how to optimize our filesystem to suit PyTorch workloads, we first needed to understand how PyTorch accesses data. Therefore, we have to first profile the PyTorch data access patterns. 
+
+We profiled the data acess patterns of PyTorch using a passthrough implementation of FUSE that logged the accesses made to files during training. We evaluated the access patterns with two different datasets: resnet and cosmoflow, with 1 and 4 GPUs each. Resnet is a composed of a few large files (~80MB each), while cosmoflow is composed of many small files (~64KB each). These four configurations let us evaluate the access patterns of PyTorch in different scenarios.
+
+After evaluation, we found the PyTorch access pattern to be as follows:
+- Epoch Starts
+- The GPU opens a few files, and reads a few chunks #footnote[Chunks are about 130KB in size] of data from each file immediately (presumably as a pre-fetch cache)
+- The GPUs then start reading from the first file sequentially, in a first-come-first-serve manner, until the end of the file is reached.
+  - When the file is a chunk long, each GPU uses a file
+- When a file is fully read, it is closed, a new one (that is after the first few that were opened at the start) is opened and its first chunks read, and the next file in the order is fully read.
+- When all files are fulle read, the epoch ends.
+- After each epoch, a small number files are opened and read sequentially, presumable for validation purposes.
+- A new epoch starts and the process repeats.
+
+=== Insights
+
+This behaviour brings us some insights into how we can optimize our filesystem to better suit PyTorch workloads:
+
+- The access pattern is predictable, with a few files being opened and read sequentially, and the next file in order is read.
+  - We can accurately pre-fetch files and chunks into a in-memory cache before they are neeeded, therefore reducing the latency and increasing GPU usage.
+- After each epoch, the first few files are opened and read sequentially.
+  - We can prefetch these files into the same cache, again reducing latency.
+
 
 = The TorchFS design
 
