@@ -69,19 +69,19 @@ After evaluation, we found the PyTorch access pattern to be as follows:
 1. Epoch Starts
 2. The GPU opens a few files, and reads a few chunks #footnote[Chunks are about 130KB in size] of data from each file immediately (presumably as a pre-fetch cache)
 3. The GPUs then start reading from the first file sequentially, in a first-come-first-serve manner, until the end of the file is reached.
-  3.1 When the file is a chunk long, each GPU uses a file
-4. When a file is fully read, it is closed, a new one (that is after the first few that were opened at the start) is opened and its first chunks read, and the next file in the order is fully read.
+  3.1 When the file is a chunk long, each GPU uses a whole file by themselves
+4. When a file is fully read, it is closed. A new one (that is after the first few that were opened at the start) is then opened and its first chunks read, and the next file in the order is fully read.
 5. When all files are fully read, the epoch ends.
-6. After each epoch, a small number files are opened and read sequentially, presumable for validation purposes.
+6. After each epoch, a small number of files are opened and read sequentially, presumably for validation purposes.
 7. A new epoch starts and the process repeats.
 
 === Insights
 
 This behaviour brings us some insights into how we can optimize our filesystem to better suit PyTorch workloads:
 
-- The access pattern is predictable, with a few files being opened and read sequentially, and the next file in order is read.
-  - We can accurately pre-fetch files and chunks into a in-memory cache before they are neeeded, therefore reducing the latency and increasing GPU usage.
-- After each epoch, the first few files are opened and read sequentially.
+1. The access pattern is predictable, with a few files being opened and read sequentially, and the next file in the order is read.
+  - We can accurately pre-fetch files and chunks into a in-memory cache before they are neeeded, reducing latency and increasing GPU usage.
+2. After each epoch, the first few files are opened and read sequentially.
   - We can prefetch these files into the same cache, again reducing latency.
 
 
