@@ -12,6 +12,8 @@ class MetadataStorage {
     MetadataStorage();
     ~MetadataStorage() = default;
 
+    Status init();
+
     std::pair<Status, Attributes> getattr(const uint64_t &inode);
     std::pair<Status, std::vector<Dirent>> readdir(const uint64_t &inode);
     std::pair<Status, FileInfo> open(const uint64_t &inode);

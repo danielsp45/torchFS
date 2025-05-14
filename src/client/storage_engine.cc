@@ -10,6 +10,11 @@
 
 Status StorageEngine::init() {
     // Initialize the root directory
+    Status s = root_->init();
+    if (!s.ok()) {
+        return s;
+    }
+
     return Status::OK();
 }
 

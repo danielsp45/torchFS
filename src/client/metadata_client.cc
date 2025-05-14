@@ -10,9 +10,9 @@ MetadataClient::MetadataClient(const std::string &server_address)
     options.protocol = "baidu_std";
     options.timeout_ms = 1000;
     options.max_retry = 3;
-    if (channel_.Init(server_address.c_str(), "", &options) != 0) {
-        throw std::runtime_error("Failed to initialize channel to " +
-                                 server_address);
+    if (channel_.Init("0.0.0.0:8000", "", &options) != 0) {
+        throw std::runtime_error(
+            "Failed to initialize channel to 0.0.0.0:8000");
     }
     stub_ = new MetadataService_Stub(&channel_);
 }
