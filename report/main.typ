@@ -66,14 +66,14 @@ To know how to optimize our filesystem to suit PyTorch workloads, we first neede
 We profiled the data acess patterns of PyTorch using a passthrough implementation of FUSE that logged the accesses made to files during training. We evaluated the access patterns with two different datasets: resnet and cosmoflow, with 1 and 4 GPUs each. Resnet is a composed of a few large files (~80MB each), while cosmoflow is composed of many small files (~64KB each). These four configurations let us evaluate the access patterns of PyTorch in different scenarios.
 
 After evaluation, we found the PyTorch access pattern to be as follows:
-- Epoch Starts
-- The GPU opens a few files, and reads a few chunks #footnote[Chunks are about 130KB in size] of data from each file immediately (presumably as a pre-fetch cache)
-- The GPUs then start reading from the first file sequentially, in a first-come-first-serve manner, until the end of the file is reached.
-  - When the file is a chunk long, each GPU uses a file
-- When a file is fully read, it is closed, a new one (that is after the first few that were opened at the start) is opened and its first chunks read, and the next file in the order is fully read.
-- When all files are fully read, the epoch ends.
-- After each epoch, a small number files are opened and read sequentially, presumable for validation purposes.
-- A new epoch starts and the process repeats.
+1. Epoch Starts
+2. The GPU opens a few files, and reads a few chunks #footnote[Chunks are about 130KB in size] of data from each file immediately (presumably as a pre-fetch cache)
+3. The GPUs then start reading from the first file sequentially, in a first-come-first-serve manner, until the end of the file is reached.
+  3.1 When the file is a chunk long, each GPU uses a file
+4. When a file is fully read, it is closed, a new one (that is after the first few that were opened at the start) is opened and its first chunks read, and the next file in the order is fully read.
+5. When all files are fully read, the epoch ends.
+6. After each epoch, a small number files are opened and read sequentially, presumable for validation purposes.
+7. A new epoch starts and the process repeats.
 
 === Insights
 
