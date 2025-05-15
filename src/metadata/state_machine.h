@@ -13,7 +13,13 @@
 #include <cstdint>
 
 enum OpType : int32_t {
-    OP_CREATEFILE = 1,
+    OP_SETATTR = 1,
+    OP_CREATEFILE = 2,
+    OP_CREATEDIR = 3,
+    OP_REMOVEFILE = 4,
+    OP_REMOVEDIR = 5,
+    OP_RENAMEFILE = 6,
+    OP_RENAMEDIR = 7,
 };
 
 class KVStore : public braft::StateMachine {
@@ -36,25 +42,37 @@ class KVStore : public braft::StateMachine {
 
     void join();
 
+    Status open(const InodeRequest *request, FileInfo *response,
+                google::protobuf::Closure *done);
     Status getattr(const InodeRequest *request, Attributes *response,
                    google::protobuf::Closure *done);
     Status readdir(const ReadDirRequest *request, ReadDirResponse *response,
                    google::protobuf::Closure *done);
-
-    std::pair<Status, FileInfo> open(uint64_t inode);
-
-    Status setattr(const ::Attributes *request, ::Attributes *response);
     Status createfile(const ::CreateRequest *request, ::Attributes *response,
                       google::protobuf::Closure *done);
-    Status createdir(const ::CreateRequest *request, ::Attributes *response);
-    Status removefile(const ::RemoveRequest *request);
-    Status removedir(const ::RemoveRequest *request);
-    Status renamefile(const ::RenameRequest *request);
-    Status renamedir(const ::RenameRequest *request);
+    Status setattr(const ::Attributes *request, ::Attributes *response,
+                   google::protobuf::Closure *done);
+    Status createdir(const CreateRequest *request, Attributes *response,
+                     google::protobuf::Closure *done);
+    Status removefile(const RemoveRequest *request,
+                      google::protobuf::Empty *response,
+                      google::protobuf::Closure *done);
+    Status removedir(const RemoveRequest *request,
+                     google::protobuf::Empty *response,
+                     google::protobuf::Closure *done);
+    Status renamefile(const ::RenameRequest *request,
+                      google::protobuf::Empty *response,
+                      google::protobuf::Closure *done);
+    Status renamedir(const RenameRequest *request,
+                     google::protobuf::Empty *response,
+                     google::protobuf::Closure *done);
 
     // Implement the StateMachine interface
 
     void on_apply(braft::Iterator &iter) override;
+    Status apply_operation(const google::protobuf::Message *request,
+                           google::protobuf::Message *response,
+                           google::protobuf::Closure *done, OpType op);
     void on_snapshot_save(braft::SnapshotWriter *writer,
                           braft::Closure *done) override;
     int on_snapshot_load(braft::SnapshotReader *reader) override;
