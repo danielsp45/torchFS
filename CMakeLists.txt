@@ -64,6 +64,7 @@ target_link_libraries(torchfs PRIVATE
     ${FUSE_LIBRARIES}
     gflags::gflags
     unofficial::brpc::brpc-static
+    unofficial::braft::braft-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
     RocksDB::rocksdb)
 

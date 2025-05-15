@@ -92,6 +92,132 @@ void KVStore::join() {
     }
 }
 
+void KVStore::on_snapshot_save(braft::SnapshotWriter * /*writer*/,
+                               braft::Closure *done) {
+    braft::AsyncClosureGuard guard(done);
+}
+
+int KVStore::on_snapshot_load(braft::SnapshotReader * /*reader*/) { return 0; }
+
+bool KVStore::is_leader() const {
+    return leader_term_.load(butil::memory_order_acquire) > 0;
+}
+
+void KVStore::on_leader_start(int64_t term) {
+    leader_term_.store(term, butil::memory_order_release);
+    LOG(INFO) << "Node becomes leader";
+}
+
+void KVStore::on_leader_stop(const butil::Status &status) {
+    leader_term_.store(-1, butil::memory_order_release);
+    LOG(INFO) << "Node stepped down : " << status;
+}
+
+Status KVStore::open(const InodeRequest *request, FileInfo *response,
+                     google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    auto [s, info] = storage_->open(request->inode());
+    if (!s.ok()) {
+        return s;
+    }
+    response->CopyFrom(info);
+    return Status::OK();
+}
+
+Status KVStore::getattr(const InodeRequest *request, Attributes *response,
+                        google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    auto [s, attr] = storage_->getattr(request->inode());
+    if (!s.ok()) {
+        return s;
+    }
+    response->CopyFrom(attr);
+    return Status::OK();
+}
+
+Status KVStore::readdir(const ReadDirRequest *request,
+                        ReadDirResponse *response,
+                        google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    auto [s, entries] = storage_->readdir(request->inode());
+    if (!s.ok()) {
+        return s;
+    }
+    for (const auto &entry : entries) {
+        Dirent *dirent = response->add_entries();
+        dirent->set_inode(entry.inode());
+        dirent->set_name(entry.name());
+    }
+    return Status::OK();
+}
+
+Status KVStore::setattr(const ::Attributes *request, ::Attributes *response,
+                        google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_SETATTR);
+}
+
+Status KVStore::createfile(const CreateRequest *request, Attributes *response,
+                           google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_CREATEFILE);
+}
+
+Status KVStore::createdir(const CreateRequest *request, Attributes *response,
+                          google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_CREATEDIR);
+}
+
+Status KVStore::removefile(const RemoveRequest *request,
+                           google::protobuf::Empty *response,
+                           google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_REMOVEFILE);
+}
+
+Status KVStore::removedir(const RemoveRequest *request,
+                          google::protobuf::Empty *response,
+                          google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_REMOVEDIR);
+}
+
+Status KVStore::renamefile(const ::RenameRequest *request,
+                           google::protobuf::Empty *response,
+                           google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_RENAMEFILE);
+}
+
+Status KVStore::renamedir(const RenameRequest *request,
+                          google::protobuf::Empty *response,
+                          google::protobuf::Closure *done) {
+    return apply_operation(request, response, done, OP_RENAMEDIR);
+}
+
+// Add this helper function to KVStore (e.g. in the private section of
+// state_machine.h)
+Status KVStore::apply_operation(const google::protobuf::Message *request,
+                                google::protobuf::Message *response,
+                                google::protobuf::Closure *done, OpType op) {
+    brpc::ClosureGuard done_guard(done);
+    if (!is_leader()) {
+        return Status::IOError("Not the leader");
+    }
+
+    butil::IOBuf log;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&log);
+    {
+        google::protobuf::io::CodedOutputStream coded_output(&wrapper);
+        coded_output.WriteVarint32(op);
+    }
+    if (!request->SerializeToZeroCopyStream(&wrapper)) {
+        LOG(ERROR) << "Fail to serialize request";
+        return Status::IOError("Failed to serialize request");
+    }
+    braft::Task task;
+    task.data = &log;
+    task.done =
+        new OperationClosure(this, op, request, response, done_guard.release());
+    node_->apply(task);
+    return Status::OK();
+}
+
 void KVStore::on_apply(braft::Iterator &iter) {
     for (; iter.valid(); iter.next()) {
         // Ensure closure's Run() is called.
@@ -130,8 +256,6 @@ void KVStore::on_apply(braft::Iterator &iter) {
                     response =
                         dynamic_cast<Attributes *>(closure->get_response());
                 }
-            } else {
-                // ...existing code...
             }
             if (request) {
                 LOG(INFO) << "Performing SetAttr operation for inode "
@@ -388,130 +512,4 @@ void KVStore::on_apply(braft::Iterator &iter) {
             break;
         }
     }
-}
-
-void KVStore::on_snapshot_save(braft::SnapshotWriter * /*writer*/,
-                               braft::Closure *done) {
-    braft::AsyncClosureGuard guard(done);
-}
-
-int KVStore::on_snapshot_load(braft::SnapshotReader * /*reader*/) { return 0; }
-
-bool KVStore::is_leader() const {
-    return leader_term_.load(butil::memory_order_acquire) > 0;
-}
-
-void KVStore::on_leader_start(int64_t term) {
-    leader_term_.store(term, butil::memory_order_release);
-    LOG(INFO) << "Node becomes leader";
-}
-
-void KVStore::on_leader_stop(const butil::Status &status) {
-    leader_term_.store(-1, butil::memory_order_release);
-    LOG(INFO) << "Node stepped down : " << status;
-}
-
-Status KVStore::open(const InodeRequest *request, FileInfo *response,
-                     google::protobuf::Closure *done) {
-    brpc::ClosureGuard done_guard(done);
-    auto [s, info] = storage_->open(request->inode());
-    if (!s.ok()) {
-        return s;
-    }
-    response->CopyFrom(info);
-    return Status::OK();
-}
-
-Status KVStore::getattr(const InodeRequest *request, Attributes *response,
-                        google::protobuf::Closure *done) {
-    brpc::ClosureGuard done_guard(done);
-    auto [s, attr] = storage_->getattr(request->inode());
-    if (!s.ok()) {
-        return s;
-    }
-    response->CopyFrom(attr);
-    return Status::OK();
-}
-
-Status KVStore::readdir(const ReadDirRequest *request,
-                        ReadDirResponse *response,
-                        google::protobuf::Closure *done) {
-    brpc::ClosureGuard done_guard(done);
-    auto [s, entries] = storage_->readdir(request->inode());
-    if (!s.ok()) {
-        return s;
-    }
-    for (const auto &entry : entries) {
-        Dirent *dirent = response->add_entries();
-        dirent->set_inode(entry.inode());
-        dirent->set_name(entry.name());
-    }
-    return Status::OK();
-}
-
-Status KVStore::setattr(const ::Attributes *request, ::Attributes *response,
-                        google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_SETATTR);
-}
-
-Status KVStore::createfile(const CreateRequest *request, Attributes *response,
-                           google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_CREATEFILE);
-}
-
-Status KVStore::createdir(const CreateRequest *request, Attributes *response,
-                          google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_CREATEDIR);
-}
-
-Status KVStore::removefile(const RemoveRequest *request,
-                           google::protobuf::Empty *response,
-                           google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_REMOVEFILE);
-}
-
-Status KVStore::removedir(const RemoveRequest *request,
-                          google::protobuf::Empty *response,
-                          google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_REMOVEDIR);
-}
-
-Status KVStore::renamefile(const ::RenameRequest *request,
-                           google::protobuf::Empty *response,
-                           google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_RENAMEFILE);
-}
-
-Status KVStore::renamedir(const RenameRequest *request,
-                          google::protobuf::Empty *response,
-                          google::protobuf::Closure *done) {
-    return apply_operation(request, response, done, OP_RENAMEDIR);
-}
-
-// Add this helper function to KVStore (e.g. in the private section of
-// state_machine.h)
-Status KVStore::apply_operation(const google::protobuf::Message *request,
-                                google::protobuf::Message *response,
-                                google::protobuf::Closure *done, OpType op) {
-    brpc::ClosureGuard done_guard(done);
-    if (!is_leader()) {
-        return Status::IOError("Not the leader");
-    }
-
-    butil::IOBuf log;
-    butil::IOBufAsZeroCopyOutputStream wrapper(&log);
-    {
-        google::protobuf::io::CodedOutputStream coded_output(&wrapper);
-        coded_output.WriteVarint32(op);
-    }
-    if (!request->SerializeToZeroCopyStream(&wrapper)) {
-        LOG(ERROR) << "Fail to serialize request";
-        return Status::IOError("Failed to serialize request");
-    }
-    braft::Task task;
-    task.data = &log;
-    task.done =
-        new OperationClosure(this, op, request, response, done_guard.release());
-    node_->apply(task);
-    return Status::OK();
 }
