@@ -4,11 +4,6 @@
 #include <string>
 #include <sys/stat.h>
 
-MetadataStorage::MetadataStorage() {
-    // Leave constructor lightweight.
-    // Don't open the DB here; defer all creation logic to init().
-}
-
 Status MetadataStorage::init() {
     // Set up options.
     rocksdb::Options options;
@@ -31,8 +26,8 @@ Status MetadataStorage::init() {
 
     // Open (or create) the DB.
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
-    rocksdb::Status status = rocksdb::DB::Open(options, "/tmp/torchdb/",
-                                               column_families, &handles, &db_);
+    rocksdb::Status status =
+        rocksdb::DB::Open(options, db_path_, column_families, &handles, &db_);
     if (!status.ok() || db_ == nullptr) {
         std::cout << "[ERROR] Failed to open RocksDB: " << status.ToString()
                   << std::endl;
@@ -50,7 +45,7 @@ Status MetadataStorage::init() {
     // 1) Verify on‐disk column families exactly match what we expect.
     std::vector<std::string> existing_cfs;
     rocksdb::Status st = rocksdb::DB::ListColumnFamilies(
-        rocksdb::DBOptions(), "/tmp/torchdb/", &existing_cfs);
+        rocksdb::DBOptions(), db_path_, &existing_cfs);
     if (!st.ok()) {
         std::cerr << "[ERROR] Cannot list column families: " << st.ToString()
                   << std::endl;

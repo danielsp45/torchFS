@@ -1,14 +1,11 @@
 #include "state_machine.h"
 #include "server.h"
+#include "util.h"
 #include <absl/utility/internal/if_constexpr.h>
 #include <condition_variable>
 #include <iostream>
 #include <memory>
 #include <mutex>
-
-// Define constructor and destructor so the vtable is emitted
-KVStore::KVStore() : storage_(), node_(nullptr), leader_term_(-1) {}
-KVStore::~KVStore() {}
 
 class OperationClosure : public braft::Closure {
   public:
@@ -28,58 +25,45 @@ class OperationClosure : public braft::Closure {
     google::protobuf::Closure *done_;
 };
 
-int KVStore::start() {
-    //------------------------------------------------------------------
-    // 1.  Bring the local key‑value store up.
-    //------------------------------------------------------------------
-    storage_ = std::make_unique<MetadataStorage>();
+int KVStore::start(int port, const std::string &conf, const std::string &path) {
+    // 1. local storage ----------------------------------------------------
+    storage_ = std::make_unique<MetadataStorage>(join_paths(path, "db"));
     if (auto st = storage_->init(); !st.ok()) {
-        LOG(ERROR) << "storage init failed: " << st.ToString();
+        LOG(ERROR) << st.ToString();
         return -1;
     }
     LOG(INFO) << "[KVStore] storage initialised";
 
-    //------------------------------------------------------------------
-    // 2.  Compose Raft options.
-    //------------------------------------------------------------------
-    butil::EndPoint my_ep(butil::my_ip(), 8000);
+    // 2. raft options -----------------------------------------------------
+    butil::EndPoint self_ep(butil::my_ip(), port);
 
     braft::NodeOptions opts;
-    opts.election_timeout_ms = 5000; // whatever you like
-    opts.fsm = this;                 // our state‑machine
+    opts.election_timeout_ms = 5000;
+    opts.fsm = this;
     opts.node_owns_fsm = false;
 
-    // local://… paths are fine for single‑process testing.
-    const std::string prefix = "local:///tmp/kvstore";
+    const std::string prefix = "local://" + join_paths(path, "kvstore");
     opts.log_uri = prefix + "/log";
     opts.raft_meta_uri = prefix + "/meta";
-    opts.snapshot_uri = prefix + "/snapshot"; // optional
+    opts.snapshot_uri = prefix + "/snapshot";
 
-    // *** KEY POINT ********************************************************
-    // The very first replica in a brand‑new cluster must know the *whole*
-    // initial configuration.  For a 1‑node cluster that is simply itself:
-    // **********************************************************************
-    std::string conf_str = std::string(butil::ip2str(my_ep.ip).c_str()) + ":" +
-                           std::to_string(my_ep.port);
-    if (opts.initial_conf.parse_from(conf_str) != 0) {
-        LOG(ERROR) << "invalid initial configuration";
-        return -1;
+    // use --conf only at **first** start-up
+    if (!conf.empty()) {
+        if (opts.initial_conf.parse_from(conf) != 0) {
+            LOG(ERROR) << "invalid --conf: " << conf;
+            return -1;
+        }
     }
-    //    (When you later bring up follower replicas leave |initial_conf|
-    //     empty and add them with node->add_peer().)
 
-    //------------------------------------------------------------------
-    // 3.  Create and start the Raft node.
-    //------------------------------------------------------------------
-    node_ = new braft::Node("kv_store", braft::PeerId(my_ep));
+    // 3. create node ------------------------------------------------------
+    node_ = new braft::Node("kv_store", braft::PeerId(self_ep));
     if (node_->init(opts) != 0) {
         LOG(ERROR) << "raft node init failed";
         delete node_;
         node_ = nullptr;
         return -1;
     }
-
-    return 0; // success: this process will shortly elect itself
+    return 0;
 }
 
 void KVStore::shutdown() {

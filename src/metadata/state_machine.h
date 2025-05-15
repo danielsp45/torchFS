@@ -10,6 +10,7 @@
 #include <braft/util.h>          // braft::AsyncClosureGuard
 #include <brpc/controller.h>     // brpc::Controller
 #include <brpc/server.h>         // brpc::Server
+#include <cstdint>
 
 enum OpType : int32_t {
     OP_CREATEFILE = 1,
@@ -17,10 +18,20 @@ enum OpType : int32_t {
 
 class KVStore : public braft::StateMachine {
   public:
-    KVStore();
-    ~KVStore();
+    KVStore() : storage_(nullptr), node_(nullptr), leader_term_(-1){};
+    ~KVStore() {
+        // Cleanup resources if needed.
+        // For example:
+        storage_.reset();
+        if (node_) {
+            node_->shutdown(nullptr);
+            node_->join();
+            delete node_;
+            node_ = nullptr;
+        }
+    }
 
-    int start();
+    int start(int port, const std::string &conf, const std::string &db);
     void shutdown();
 
     void join();
@@ -55,24 +66,4 @@ class KVStore : public braft::StateMachine {
     std::unique_ptr<MetadataStorage> storage_;
     braft::Node *volatile node_;
     butil::atomic<int64_t> leader_term_;
-};
-
-class RpcDone : public braft::Closure {
-  public:
-    explicit RpcDone(::Attributes *response) : response_(response) {}
-
-    void Run() override {
-        if (status().ok()) {
-            // Task succeeded, no additional action needed
-        } else {
-            // Handle failure
-            LOG(ERROR) << "Task failed: " << status();
-        }
-        delete this; // Automatically delete the closure after execution
-    }
-
-    ::Attributes *response_ptr() { return response_; }
-
-  private:
-    ::Attributes *response_;
 };
