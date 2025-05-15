@@ -1,16 +1,23 @@
 #include "state_machine.h"
+#include "metadata.pb.h"
 #include "server.h"
 #include "util.h"
-#include <absl/utility/internal/if_constexpr.h>
-#include <condition_variable>
+#include <braft/raft.h>
+#include <braft/storage.h>
+#include <braft/util.h>
+#include <brpc/controller.h>
+#include <brpc/server.h>
+#include <butil/at_exit.h>
 #include <iostream>
 #include <memory>
-#include <mutex>
 
+// Reimplemented OperationClosure with proper getters.
 class OperationClosure : public braft::Closure {
   public:
-    OperationClosure(KVStore *kv_store, const CreateRequest *request,
-                     Attributes *response, google::protobuf::Closure *done)
+    OperationClosure(KVStore *kv_store,
+                     const google::protobuf::Message *request,
+                     google::protobuf::Message *response,
+                     google::protobuf::Closure *done)
         : kv_store_(kv_store), request_(request), response_(response),
           done_(done) {}
 
@@ -19,14 +26,21 @@ class OperationClosure : public braft::Closure {
         brpc::ClosureGuard done_guard(done_);
     }
 
+    // Fix: get_request() must return the original request, not response.
+    google::protobuf::Message *get_request() {
+        return const_cast<google::protobuf::Message *>(request_);
+    }
+
+    google::protobuf::Message *get_response() { return response_; }
+
     KVStore *kv_store_;
-    const CreateRequest *request_;
-    Attributes *response_;
+    const google::protobuf::Message *request_;
+    google::protobuf::Message *response_;
     google::protobuf::Closure *done_;
 };
 
 int KVStore::start(int port, const std::string &conf, const std::string &path) {
-    // 1. local storage ----------------------------------------------------
+    // 1. Local storage initialization.
     storage_ = std::make_unique<MetadataStorage>(join_paths(path, "db"));
     if (auto st = storage_->init(); !st.ok()) {
         LOG(ERROR) << st.ToString();
@@ -34,9 +48,8 @@ int KVStore::start(int port, const std::string &conf, const std::string &path) {
     }
     LOG(INFO) << "[KVStore] storage initialised";
 
-    // 2. raft options -----------------------------------------------------
+    // 2. Raft options setup.
     butil::EndPoint self_ep(butil::my_ip(), port);
-
     braft::NodeOptions opts;
     opts.election_timeout_ms = 5000;
     opts.fsm = this;
@@ -47,7 +60,6 @@ int KVStore::start(int port, const std::string &conf, const std::string &path) {
     opts.raft_meta_uri = prefix + "/meta";
     opts.snapshot_uri = prefix + "/snapshot";
 
-    // use --conf only at **first** start-up
     if (!conf.empty()) {
         if (opts.initial_conf.parse_from(conf) != 0) {
             LOG(ERROR) << "invalid --conf: " << conf;
@@ -55,7 +67,7 @@ int KVStore::start(int port, const std::string &conf, const std::string &path) {
         }
     }
 
-    // 3. create node ------------------------------------------------------
+    // 3. Create Raft node.
     node_ = new braft::Node("kv_store", braft::PeerId(self_ep));
     if (node_->init(opts) != 0) {
         LOG(ERROR) << "raft node init failed";
@@ -67,54 +79,70 @@ int KVStore::start(int port, const std::string &conf, const std::string &path) {
 }
 
 void KVStore::shutdown() {
-    if (node_)
+    if (node_) {
         node_->shutdown(nullptr);
+    }
 }
 
 void KVStore::join() {
-    if (node_)
+    if (node_) {
         node_->join();
+    }
 }
 
 void KVStore::on_apply(braft::Iterator &iter) {
     for (; iter.valid(); iter.next()) {
-        // This guard ensures that the closure's `Run()` method is called
+        // Guard to ensure closure's Run() is called.
         braft::AsyncClosureGuard closure_guard(iter.done());
-
-        // Parse the log data
+        // Parse the log data.
         butil::IOBuf data = iter.data();
 
-        OperationClosure *closure =
-            iter.done() ? dynamic_cast<OperationClosure *>(iter.done())
-                        : nullptr;
-        const CreateRequest *request = closure ? closure->request_ : nullptr;
-        Attributes *response = closure ? closure->response_ : nullptr;
+        CreateRequest *request = nullptr;
+        Attributes *response = nullptr;
+        OperationClosure *closure = nullptr;
 
-        CreateRequest req;
-        if (request) {
-            // Use the request from the closure if available
-            req = *request;
+        if (iter.done()) {
+            // Task applied on this node: get request from closure.
+            std::cout << "iter.done() is true" << std::endl;
+            closure = dynamic_cast<OperationClosure *>(iter.done());
+            if (closure) {
+                request = dynamic_cast<CreateRequest *>(closure->get_request());
+                response = dynamic_cast<Attributes *>(closure->get_response());
+            }
+            if (request) {
+                std::cout << "request: " << request->DebugString() << std::endl;
+            }
         } else {
-            // Parse the request from the log
+            // Parse the request from the log.
+            std::cout << "iter.done() is false" << std::endl;
             butil::IOBufAsZeroCopyInputStream wrapper(data);
-            CHECK(req.ParseFromZeroCopyStream(&wrapper));
+            CreateRequest tmp_req; // temporary request to be filled
+            CHECK(tmp_req.ParseFromZeroCopyStream(&wrapper));
+            // Copy parsed data into request pointer.
+            // (If needed, you can allocate a new CreateRequest.)
+            request = new CreateRequest(tmp_req);
         }
 
-        // Perform the CreateFile operation
-        auto [status, attr] = storage_->create_file(req.p_inode(), req.name());
-        if (response) {
-            if (status.ok()) {
-                response->CopyFrom(attr);
-            } else {
-                // Handle error case
-                response->set_inode(0); // or some error code
-                LOG(ERROR) << "Failed to create file: " << status.ToString();
+        // Perform the CreateFile operation.
+        if (request) {
+            std::cout << "Performing CreateFile operation for inode "
+                      << request->p_inode() << std::endl;
+            auto [status, attr] =
+                storage_->create_file(request->p_inode(), request->name());
+            if (response) {
+                if (status.ok()) {
+                    std::cout << "CreateFile operation succeeded" << std::endl;
+                    response->CopyFrom(attr);
+                } else {
+                    std::cout << "CreateFile operation failed" << std::endl;
+                    // Handle error case.
+                    response->set_inode(0); // or any error-indicative code.
+                    LOG(ERROR)
+                        << "Failed to create file: " << status.ToString();
+                }
             }
         }
-
-        // Log the operation for debugging
-        LOG(INFO) << "Applied CreateFile operation at log_index="
-                  << iter.index();
+        // Note: If you allocated a temporary CreateRequest, ensure you free it.
     }
 }
 
@@ -139,9 +167,6 @@ void KVStore::on_leader_stop(const butil::Status &status) {
     LOG(INFO) << "Node stepped down : " << status;
 }
 
-// Direct, non-raft read methods changed to return a std::pair instead of using
-// output params
-
 Status KVStore::getattr(const InodeRequest *request, Attributes *response,
                         google::protobuf::Closure *done) {
     brpc::ClosureGuard done_guard(done);
@@ -149,7 +174,6 @@ Status KVStore::getattr(const InodeRequest *request, Attributes *response,
     if (!s.ok()) {
         return s;
     }
-
     response->CopyFrom(attr);
     return Status::OK();
 }
@@ -162,17 +186,15 @@ Status KVStore::readdir(const ReadDirRequest *request,
     if (!s.ok()) {
         return s;
     }
-
     for (const auto &entry : entries) {
         Dirent *dirent = response->add_entries();
         dirent->set_inode(entry.inode());
         dirent->set_name(entry.name());
     }
-
     return Status::OK();
 }
 
-Status KVStore::createfile(const CreateRequest *request, Attributes *response,
+Status KVStore::createfile(const CreateRequest *req, Attributes *response,
                            google::protobuf::Closure *done) {
     brpc::ClosureGuard done_guard(done);
     if (!is_leader()) {
@@ -181,21 +203,14 @@ Status KVStore::createfile(const CreateRequest *request, Attributes *response,
 
     butil::IOBuf log;
     butil::IOBufAsZeroCopyOutputStream wrapper(&log);
-    if (!request->SerializeToZeroCopyStream(&wrapper)) {
+    if (!req->SerializeToZeroCopyStream(&wrapper)) {
         LOG(ERROR) << "Fail to serialize request";
-        // TODO return failed request
         return Status::IOError("Failed to serialize request");
     }
 
-    // Apply this log as a braft::Task
     braft::Task task;
     task.data = &log;
-    // This callback would be iovoked when the task actually excuted or
-    // fail
-    task.done =
-        new OperationClosure(this, request, response, done_guard.release());
-
+    task.done = new OperationClosure(this, req, response, done_guard.release());
     node_->apply(task);
-
     return Status::OK();
 }
