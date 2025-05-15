@@ -14,19 +14,20 @@
 // Reimplemented OperationClosure with proper getters.
 class OperationClosure : public braft::Closure {
   public:
-    OperationClosure(KVStore *kv_store,
+    OperationClosure(KVStore *kv_store, OpType op_type,
                      const google::protobuf::Message *request,
                      google::protobuf::Message *response,
                      google::protobuf::Closure *done)
-        : kv_store_(kv_store), request_(request), response_(response),
-          done_(done) {}
+        : kv_store_(kv_store), op_type_(op_type), request_(request),
+          response_(response), done_(done) {}
 
     void Run() override {
         std::unique_ptr<OperationClosure> self_guard(this);
         brpc::ClosureGuard done_guard(done_);
     }
 
-    // Fix: get_request() must return the original request, not response.
+    OpType op_type() { return op_type_; }
+
     google::protobuf::Message *get_request() {
         return const_cast<google::protobuf::Message *>(request_);
     }
@@ -34,6 +35,7 @@ class OperationClosure : public braft::Closure {
     google::protobuf::Message *get_response() { return response_; }
 
     KVStore *kv_store_;
+    OpType op_type_;
     const google::protobuf::Message *request_;
     google::protobuf::Message *response_;
     google::protobuf::Closure *done_;
@@ -92,57 +94,80 @@ void KVStore::join() {
 
 void KVStore::on_apply(braft::Iterator &iter) {
     for (; iter.valid(); iter.next()) {
-        // Guard to ensure closure's Run() is called.
+        // Ensure closure's Run() is called.
         braft::AsyncClosureGuard closure_guard(iter.done());
-        // Parse the log data.
         butil::IOBuf data = iter.data();
+        OpType op;
 
-        CreateRequest *request = nullptr;
-        Attributes *response = nullptr;
-        OperationClosure *closure = nullptr;
-
+        // Determine op type either from the closure or by parsing the log data.
         if (iter.done()) {
-            // Task applied on this node: get request from closure.
-            std::cout << "iter.done() is true" << std::endl;
-            closure = dynamic_cast<OperationClosure *>(iter.done());
+            OperationClosure *closure =
+                dynamic_cast<OperationClosure *>(iter.done());
             if (closure) {
-                request = dynamic_cast<CreateRequest *>(closure->get_request());
-                response = dynamic_cast<Attributes *>(closure->get_response());
-            }
-            if (request) {
-                std::cout << "request: " << request->DebugString() << std::endl;
+                op = closure->op_type();
+            } else {
+                LOG(ERROR) << "Invalid closure type";
+                continue;
             }
         } else {
-            // Parse the request from the log.
-            std::cout << "iter.done() is false" << std::endl;
             butil::IOBufAsZeroCopyInputStream wrapper(data);
-            CreateRequest tmp_req; // temporary request to be filled
-            CHECK(tmp_req.ParseFromZeroCopyStream(&wrapper));
-            // Copy parsed data into request pointer.
-            // (If needed, you can allocate a new CreateRequest.)
-            request = new CreateRequest(tmp_req);
+            google::protobuf::io::CodedInputStream coded_input(&wrapper);
+            uint32_t op_val = 0;
+            CHECK(coded_input.ReadVarint32(&op_val));
+            op = static_cast<OpType>(op_val);
         }
 
-        // Perform the CreateFile operation.
-        if (request) {
-            std::cout << "Performing CreateFile operation for inode "
-                      << request->p_inode() << std::endl;
-            auto [status, attr] =
-                storage_->create_file(request->p_inode(), request->name());
-            if (response) {
-                if (status.ok()) {
-                    std::cout << "CreateFile operation succeeded" << std::endl;
-                    response->CopyFrom(attr);
-                } else {
-                    std::cout << "CreateFile operation failed" << std::endl;
-                    // Handle error case.
-                    response->set_inode(0); // or any error-indicative code.
-                    LOG(ERROR)
-                        << "Failed to create file: " << status.ToString();
+        switch (op) {
+        case OP_CREATEFILE: {
+            CreateRequest *request = nullptr;
+            Attributes *response = nullptr;
+            if (iter.done()) {
+                OperationClosure *closure =
+                    dynamic_cast<OperationClosure *>(iter.done());
+                if (closure) {
+                    request =
+                        dynamic_cast<CreateRequest *>(closure->get_request());
+                    response =
+                        dynamic_cast<Attributes *>(closure->get_response());
+                }
+            } else {
+                // Parse the op type (already extracted) and then the
+                // CreateRequest payload.
+                butil::IOBufAsZeroCopyInputStream wrapper(data);
+                google::protobuf::io::CodedInputStream coded_input(&wrapper);
+                // Skip the op type field.
+                uint32_t dummy;
+                coded_input.ReadVarint32(&dummy);
+                CreateRequest tmp;
+                CHECK(tmp.ParseFromCodedStream(&coded_input));
+                request = new CreateRequest(tmp);
+            }
+            if (request) {
+                LOG(INFO) << "Performing CreateFile operation for inode "
+                          << request->p_inode();
+                auto [status, attr] =
+                    storage_->create_file(request->p_inode(), request->name());
+                if (response) {
+                    if (status.ok()) {
+                        LOG(INFO) << "CreateFile operation succeeded";
+                        response->CopyFrom(attr);
+                    } else {
+                        LOG(ERROR) << "CreateFile operation failed: "
+                                   << status.ToString();
+                        response->set_inode(0); // Indicate error.
+                    }
                 }
             }
+            // Free the temporary request if it was allocated.
+            if (!iter.done() && request) {
+                delete request;
+            }
+            break;
         }
-        // Note: If you allocated a temporary CreateRequest, ensure you free it.
+        default:
+            LOG(WARNING) << "Unknown op type: " << op;
+            break;
+        }
     }
 }
 
@@ -203,6 +228,14 @@ Status KVStore::createfile(const CreateRequest *req, Attributes *response,
 
     butil::IOBuf log;
     butil::IOBufAsZeroCopyOutputStream wrapper(&log);
+
+    // Serialize the op_type first.
+    {
+        google::protobuf::io::CodedOutputStream coded_output(&wrapper);
+        coded_output.WriteVarint32(OP_CREATEFILE);
+    }
+
+    // Then serialize the actual request.
     if (!req->SerializeToZeroCopyStream(&wrapper)) {
         LOG(ERROR) << "Fail to serialize request";
         return Status::IOError("Failed to serialize request");
@@ -210,7 +243,8 @@ Status KVStore::createfile(const CreateRequest *req, Attributes *response,
 
     braft::Task task;
     task.data = &log;
-    task.done = new OperationClosure(this, req, response, done_guard.release());
+    task.done = new OperationClosure(this, OP_CREATEFILE, req, response,
+                                     done_guard.release());
     node_->apply(task);
     return Status::OK();
 }
