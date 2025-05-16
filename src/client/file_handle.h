@@ -3,6 +3,8 @@
 
 #include "metadata.pb.h"
 #include "metadata_client.h"
+#include "storage.pb.h"
+#include "storage_client.h"
 #include "slice.h"
 #include "status.h"
 #include "util.h"
@@ -15,8 +17,9 @@ class FileHandle {
     // Remove id parameter from constructor
     FileHandle(const uint64_t &p_inode, const uint64_t &inode,
                std::string logic_path, std::string mount_path,
-               std::shared_ptr<MetadataClient> metadata)
-        : p_inode_(p_inode), inode_(inode), metadata_(metadata),
+               std::shared_ptr<MetadataClient> metadata,
+               std::shared_ptr<StorageClient> storage)
+        : p_inode_(p_inode), inode_(inode), metadata_(metadata), storage_(storage),
           logic_path_(logic_path), mount_path_(mount_path), fd_(-1) {}
 
     ~FileHandle() {}
@@ -46,6 +49,7 @@ class FileHandle {
     std::string logic_path_; // Logical path of the file
     std::string mount_path_; // Local file path for write operations
     std::shared_ptr<MetadataClient> metadata_; // Metadata storage
+    std::shared_ptr<StorageClient> storage_;   // Storage client
     int fd_;                                   // File descriptor
 
     Status setattr(Attributes &attr);

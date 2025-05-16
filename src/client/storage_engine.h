@@ -13,7 +13,7 @@ class StorageEngine {
     StorageEngine(const std::string &mount_path)
         : mount_path_(mount_path),
           root_(std::make_unique<Directory>(
-              0, 1, "/", mount_path, std::make_shared<MetadataClient>())) {
+              0, 1, "/", mount_path, std::make_shared<MetadataClient>(), std::make_shared<StorageClient>())) {
 
         // Initialize the root directory
         auto status = root_->init();

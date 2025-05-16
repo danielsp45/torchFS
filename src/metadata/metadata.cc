@@ -2,7 +2,7 @@
 #include "status.h"
 #include "storage.h"
 
-#include "rpc_service.h"
+#include "server.h"
 #include <brpc/server.h>
 #include <google/protobuf/empty.pb.h>
 

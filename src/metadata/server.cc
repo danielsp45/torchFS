@@ -1,4 +1,4 @@
-#include "rpc_service.h"
+#include "server.h"
 #include <iostream>
 
 // RPC method implementations

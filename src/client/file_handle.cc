@@ -29,19 +29,7 @@ Status FileHandle::destroy() {
         return s;
     }
 
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
-    if (::access(path.c_str(), F_OK) == -1) {
-        // if the file doesn't exist, we don't need to remove it from the disk
-        return Status::OK();
-    }
-
-    if (::unlink(path.c_str()) == -1) {
-        return Status::IOError("Failed to remove file: " +
-                               std::string(strerror(errno)));
-    }
-
-    return Status::OK();
+    return storage_->remove_file(std::to_string(inode_));
 }
 
 Status FileHandle::open(int flags, mode_t mode) {
@@ -143,15 +131,18 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
         std::string path = join_paths(mount_path_, inode_str);
         fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
         if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
+            return Status::IOError("Failed to open file: " + std::string(strerror(errno)));
         }
     }
-    ssize_t result = ::pread(fd_, dst.data(), size, offset);
-    if (result == -1) {
-        return Status::IOError("Failed to read file: " +
-                               std::string(strerror(errno)));
+
+    std::string file_id = std::to_string(inode_);
+    auto [st, data] = storage_->read(file_id, offset, size);
+    if (!st.ok()) {
+        return st;
     }
+
+    // Assuming it's impossible to return more bytes than size argument
+    memcpy(dst.data(), data.payload().c_str(), data.len());
     return Status::OK();
 }
 
@@ -161,25 +152,30 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
         std::string path = join_paths(mount_path_, inode_str);
         fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
         if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
+            return Status::IOError("Failed to open file: " + std::string(strerror(errno)));
         }
     }
-    ssize_t result = ::pwrite(fd_, src.data(), count, offset);
-    if (result == -1) {
-        return Status::IOError("Failed to write file: " +
-                               std::string(strerror(errno)));
-    }
+    
+    std::string file_id = std::to_string(inode_);
+    Data data;
+    data.set_payload(src.data());
+    data.set_len(count);
 
+    auto [st, bytes_written] = storage_->write(file_id, data, offset);
+    if (!st.ok()) {
+        return st;
+    }
+    
+    // Update metadata
     Attributes attr = metadata_->getattr(inode_).second;
-    struct stat st;
-    if (::fstat(fd_, &st) == -1) {
-        return Status::IOError("Failed to get file size: " +
-                               std::string(strerror(errno)));
+    struct stat stat;
+    if (::fstat(fd_, &stat) == -1) {
+        return Status::IOError("Failed to get file size: " + std::string(strerror(errno)));
     }
-
-    attr.set_size(st.st_size);
-
+    uint64_t new_size = offset + bytes_written;
+    uint64_t updated_size = std::max(attr.size(), new_size);
+    attr.set_size(updated_size);
+    
     Status s = setattr(attr);
     if (!s.ok()) {
         return s;

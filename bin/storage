@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Go to project root
+BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
+cd "${BASE_DIR}/.." || exit 127
+
+port=9000
+mount_path="/home/vagrant/storage"
+
+function display_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+This script starts the TorchFS storage server.
+Options:
+  --port=<port>         Set the port for the storage server (default: ${port})
+  --mount-path=<path>   Set the storage root directory (default: ${mount_path})
+  -h, --help            Show this help message.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --port=*)
+      port="${1#*=}"
+      shift
+      ;;
+    --mount-path=*)
+      mount_path="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      display_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      display_help
+      exit 1
+      ;;
+  esac
+done
+
+echo "Starting storage server:"
+echo "  - port:      ${port}"
+echo "  - mount dir: ${mount_path}"
+./build/storage "${mount_path}" "${port}"

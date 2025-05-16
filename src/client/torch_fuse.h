@@ -64,14 +64,14 @@ static const struct fuse_operations torch_oper = {
     .listxattr = NULL,
     .removexattr = NULL,
     .opendir = NULL,
-    .readdir = torch_readdir, // Now matches the 6-parameter signature.
+    .readdir = torch_readdir,
     .releasedir = NULL,
     .fsyncdir = NULL,
     .init = NULL,
     .destroy = NULL,
     .access = torch_access,
     .create = torch_create,
-    //.ftruncate = NULL,         // Removed since field no longer exists.
+    //.ftruncate = NULL,
     .lock = NULL,
     .utimens = torch_utimens,
     .bmap = NULL,
@@ -81,7 +81,7 @@ static const struct fuse_operations torch_oper = {
     .read_buf = NULL,
     .flock = NULL,
     .fallocate = NULL,
-    .lseek = torch_lseek // Now returns off_t.
+    .lseek = torch_lseek
 };
 
 #endif // TORCH_FUSE_H

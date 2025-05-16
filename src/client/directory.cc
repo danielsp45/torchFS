@@ -85,8 +85,7 @@ Directory::create_file(const std::string &name) {
     }
 
     std::string new_path = join_paths(logic_path_, name);
-    auto fh = std::make_shared<FileHandle>(inode_, -1, new_path, mount_path_,
-                                           metadata_);
+    auto fh = std::make_shared<FileHandle>(inode_, -1, new_path, mount_path_, metadata_, storage_);
     auto s = fh->init();
     if (!s.ok()) {
         // NOTE: if the file creation fails, since it's a shared_ptr, the
@@ -105,8 +104,7 @@ Directory::create_subdirectory(const std::string &name) {
     }
 
     std::string new_path = join_paths(logic_path_, name);
-    auto new_dir = std::make_unique<Directory>(inode_, -1, new_path,
-                                               mount_path_, metadata_);
+    auto new_dir = std::make_unique<Directory>(inode_, -1, new_path, mount_path_, metadata_, storage_);
     auto s = new_dir->init();
     if (!s.ok()) {
         return {s, nullptr};
@@ -303,8 +301,7 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
 
     if (attr.mode() & S_IFDIR) {
         // it's a directory
-        auto new_dir = std::make_unique<Directory>(inode_, inode, name,
-                                                   mount_path_, metadata_);
+        auto new_dir = std::make_unique<Directory>(inode_, inode, name, mount_path_, metadata_, storage_);
         auto s = new_dir->init();
         if (!s.ok()) {
             return s;
@@ -312,8 +309,7 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
         subdirs_[name] = std::move(new_dir);
     } else {
         // it's a file
-        auto new_file = std::make_shared<FileHandle>(inode_, inode, name,
-                                                     mount_path_, metadata_);
+        auto new_file = std::make_shared<FileHandle>(inode_, inode, name, mount_path_, metadata_, storage_);
         auto s = new_file->init();
         if (!s.ok()) {
             return s;
