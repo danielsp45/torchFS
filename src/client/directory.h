@@ -17,8 +17,8 @@ class Directory {
               const std::string &logic_path, const std::string &mount_path,
               std::shared_ptr<MetadataClient> metadata_client,
               std::shared_ptr<StorageClient> storage_client)
-        : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
-          mount_path_(mount_path), subdirs_(), files_(),
+        : p_inode_(p_inode), inode_(inode), mount_path_(mount_path),
+          logic_path_(logic_path), subdirs_(), files_(),
           metadata_(metadata_client), storage_(storage_client) {}
 
     ~Directory() = default;
@@ -37,7 +37,7 @@ class Directory {
     std::pair<Status, Directory *> create_subdirectory(const std::string &name);
 
     std::pair<Status, std::shared_ptr<FileHandle>>
-    remove_file(const std::string name);
+    remove_file(const std::string name, bool delete_fh = true);
 
     std::pair<Status, std::unique_ptr<Directory>>
     remove_dir(const std::string name);
