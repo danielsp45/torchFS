@@ -395,6 +395,7 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
     if (!s.ok()) {
         return s;
     }
+    std::string old_name = attr.path();
     attr.set_path(new_name);
     std::string value;
     if (!attr.SerializeToString(&value)) {
@@ -409,8 +410,7 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
     }
 
     // remove the old entry in the dentry column family
-    std::string old_dentry_key =
-        std::to_string(old_p_inode) + ":" + std::to_string(inode);
+    std::string old_dentry_key = std::to_string(old_p_inode) + ":" + old_name;
     status = db_->Delete(write_options, cf_dentry_, old_dentry_key);
     if (!status.ok()) {
         return Status::IOError("Failed to remove old directory entry: " +

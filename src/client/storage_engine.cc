@@ -167,7 +167,7 @@ Status StorageEngine::rename(const std::string &src_path,
         }
 
         auto [remove_dir_status, directory_to_move] =
-            src_parent_directory->remove_dir(src_name);
+            src_parent_directory->remove_dir(src_name, false);
         if (!remove_dir_status.ok()) {
             return remove_dir_status;
         }
