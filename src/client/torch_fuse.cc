@@ -9,7 +9,7 @@
 
 // Removed static for external linkage.
 int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                  off_t offset, struct fuse_file_info *fi,
+                  off_t /*offset*/, struct fuse_file_info * /*fi*/,
                   fuse_readdir_flags flags) {
     std::cout << "[LOG] readdir" << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
@@ -22,14 +22,8 @@ int torch_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 // Removed static for external linkage.
-off_t torch_lseek(const char *path, off_t offset, int whence,
-                  struct fuse_file_info *fi) {
-    return -ENOSYS;
-}
-
-// Removed static for external linkage.
 int torch_getattr(const char *path, struct stat *stbuf,
-                  struct fuse_file_info *fi) {
+                  struct fuse_file_info * /*fi*/) {
     std::cout << "[LOG] getattr " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::cout << se->get_logic_path(path) << std::endl;
@@ -52,16 +46,11 @@ int torch_getattr(const char *path, struct stat *stbuf,
     return 0;
 }
 
-// Removed static for external linkage.
-int torch_access(const char *path, int mask) {
-    return 0; // No access check needed
+int torch_access(const char * /*path*/, int /*mask*/) {
+    // INFO: We don't have a permission system in place
+    // so we allow everyone
+    return 0;
 }
-
-// Removed static for external linkage.
-int torch_readlink(const char *path, char *buf, size_t size) { return -ENOSYS; }
-
-// Removed static for external linkage.
-int torch_mknod(const char *path, mode_t mode, dev_t rdev) { return -ENOSYS; }
 
 // Removed static for external linkage.
 int torch_unlink(const char *path) {
@@ -85,10 +74,10 @@ int torch_unlink(const char *path) {
 }
 
 // Removed static for external linkage.
-int torch_mkdir(const char *path, mode_t mode) {
+int torch_mkdir(const char *path, mode_t /*mode*/) {
     std::cout << "[LOG] mkdir " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
-    Status s = se->mkdir(se->get_logic_path(path), mode);
+    Status s = se->mkdir(se->get_logic_path(path));
     if (!s.ok()) {
         std::cerr << "Error creating directory: " << s.ToString() << std::endl;
         return -errno;
@@ -109,10 +98,7 @@ int torch_rmdir(const char *path) {
 }
 
 // Removed static for external linkage.
-int torch_symlink(const char *from, const char *to) { return -ENOSYS; }
-
-// Removed static for external linkage.
-int torch_rename(const char *from, const char *to, unsigned int flags) {
+int torch_rename(const char *from, const char *to, unsigned int /*flags*/) {
     std::cout << "[LOG] rename" << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
@@ -127,31 +113,12 @@ int torch_rename(const char *from, const char *to, unsigned int flags) {
 }
 
 // Removed static for external linkage.
-int torch_link(const char *from, const char *to) { return -ENOSYS; }
-
-// Removed static for external linkage.
-int torch_chmod(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    return -ENOSYS;
-}
-
-// Removed static for external linkage.
-int torch_chown(const char *path, uid_t uid, gid_t gid,
-                struct fuse_file_info *fi) {
-    return -ENOSYS;
-}
-
-// Removed static for external linkage.
-int torch_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
-    return -ENOSYS;
-}
-
-// Removed static for external linkage.
-int torch_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+int torch_create(const char *path, mode_t /*mode*/, struct fuse_file_info *fi) {
     std::cout << "[LOG] create " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
 
-    Status s = se->create(se->get_logic_path(path), fi->flags, mode);
+    Status s = se->create(se->get_logic_path(path));
     if (!s.ok()) {
         std::cerr << "Error creating file: " << s.ToString() << std::endl;
         return -errno;
@@ -210,9 +177,6 @@ int torch_write(const char *path, const char *buf, size_t size, off_t offset,
 }
 
 // Removed static for external linkage.
-int torch_statfs(const char *path, struct statvfs *stbuf) { return -ENOSYS; }
-
-// Removed static for external linkage.
 int torch_release(const char *path, struct fuse_file_info *fi) {
     std::cout << "[LOG] release" << path << std::endl;
     (void)fi;
@@ -230,7 +194,9 @@ int torch_release(const char *path, struct fuse_file_info *fi) {
 }
 
 // Removed static for external linkage.
-int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi) {
+// TODO: implement fsync with cache
+int torch_fsync(const char *path, int /*isdatasync*/,
+                struct fuse_file_info *fi) {
     std::cout << "[LOG] fsync " << path << std::endl;
     (void)fi;
 

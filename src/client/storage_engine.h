@@ -13,21 +13,15 @@ class StorageEngine {
     StorageEngine(const std::string &mount_path)
         : mount_path_(mount_path),
           root_(std::make_unique<Directory>(
-              0, 1, "/", mount_path, std::make_shared<MetadataClient>(), std::make_shared<StorageClient>())) {
-
-        // Initialize the root directory
-        auto status = root_->init();
-        if (!status.ok()) {
-            throw std::runtime_error("Failed to initialize root directory");
-        }
-    }
+              0, 1, "/", mount_path, std::make_shared<MetadataClient>(),
+              std::make_shared<StorageClient>())) {}
 
     ~StorageEngine() {}
 
     Status init();
 
     Status open(const std::string &path, int flagse);
-    Status create(const std::string &path, int flags, mode_t mode);
+    Status create(const std::string &path);
     Status close(std::string &path);
     Status remove(const std::string path);
     Status read(std::string &path, Slice result, size_t size, off_t offset);
@@ -37,15 +31,15 @@ class StorageEngine {
     Status getattr(const std::string &path, struct stat *stbuf);
     Status readdir(const std::string &path, void *buf, fuse_fill_dir_t filler,
                    fuse_readdir_flags flags);
-    Status mkdir(const std::string &path, mode_t mode);
+    Status mkdir(const std::string &path);
     Status rmdir(const std::string &path);
     Status utimens(const std::string &path, const struct timespec tv[2]);
 
     std::string get_logic_path(const std::string &path);
 
   private:
-    std::unique_ptr<Directory> root_; // Root directory
     std::string mount_path_;          // Directory for local storage
+    std::unique_ptr<Directory> root_; // Root directory
 
     std::string register_fh(std::shared_ptr<FileHandle> fh);
     std::shared_ptr<FileHandle> lookup_fh(std::string &logic_path);

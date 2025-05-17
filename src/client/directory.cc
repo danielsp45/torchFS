@@ -3,19 +3,14 @@
 #include "status.h"
 #include "util.h"
 
-#include <cstddef>
 #include <cstring>
 #include <dirent.h>
-#include <errno.h>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <sys/stat.h> // Added for stat()
-#include <utility>
-#include <vector>
 
 Status Directory::init() {
-    if (inode_ == -1) {
+    if (inode_ == static_cast<uint64_t>(-1)) {
         // we need to create the file in the metadata too
         auto [s, attr] = metadata_->create_dir(p_inode_, filename(logic_path_));
         if (!s.ok()) {
@@ -85,7 +80,8 @@ Directory::create_file(const std::string &name) {
     }
 
     std::string new_path = join_paths(logic_path_, name);
-    auto fh = std::make_shared<FileHandle>(inode_, -1, new_path, mount_path_, metadata_, storage_);
+    auto fh = std::make_shared<FileHandle>(inode_, -1, new_path, mount_path_,
+                                           metadata_, storage_);
     auto s = fh->init();
     if (!s.ok()) {
         // NOTE: if the file creation fails, since it's a shared_ptr, the
@@ -104,7 +100,8 @@ Directory::create_subdirectory(const std::string &name) {
     }
 
     std::string new_path = join_paths(logic_path_, name);
-    auto new_dir = std::make_unique<Directory>(inode_, -1, new_path, mount_path_, metadata_, storage_);
+    auto new_dir = std::make_unique<Directory>(
+        inode_, -1, new_path, mount_path_, metadata_, storage_);
     auto s = new_dir->init();
     if (!s.ok()) {
         return {s, nullptr};
@@ -118,7 +115,7 @@ Directory::create_subdirectory(const std::string &name) {
 }
 
 std::pair<Status, std::shared_ptr<FileHandle>>
-Directory::remove_file(const std::string name) {
+Directory::remove_file(const std::string name, bool delete_fh) {
     auto it = files_.find(name);
     if (it == files_.end()) {
         return {Status::NotFound("File not found"), nullptr};
@@ -127,7 +124,13 @@ Directory::remove_file(const std::string name) {
 
     files_.erase(it);
 
-    return {fh->destroy(), fh};
+    if (delete_fh) {
+        // Remove the file from the metadata service
+        return {fh->destroy(), fh};
+    } else {
+        // If not removing from metadata, just return the file handle
+        return {Status::OK(), fh};
+    }
 }
 
 std::pair<Status, std::unique_ptr<Directory>>
@@ -155,25 +158,31 @@ Directory::remove_dir(const std::string name) {
 Status Directory::move_file(Directory *parent_dir,
                             std::shared_ptr<FileHandle> fh,
                             const std::string &new_name) {
-    auto it = files_.find(fh->get_name());
-    if (it != files_.end()) {
-        return Status::AlreadyExists("File already exists");
+    // Ensure the file doesn't already exist in the target directory.
+    if (files_.find(new_name) != files_.end()) {
+        return Status::AlreadyExists(
+            "Target file already exists in target directory");
     }
 
+    // Rename the file in the metadata.
     auto s = metadata_->rename_file(parent_dir->get_inode(), inode_,
                                     fh->get_inode(), new_name);
     if (!s.ok()) {
         return s;
     }
-    // Remove the file from the old directory.
-    auto [s1, old_file_handle] = remove_file(fh->get_name());
+
+    // Remove the file from the parent directory.
+    auto [s1, removed_file] = parent_dir->remove_file(fh->get_name(), false);
     if (!s1.ok()) {
         return Status::NotFound("File not found in parent directory");
     }
-    // rename the file
-    fh->set_logic_path(join_paths(logic_path_, new_name));
-    fh->set_parent_inode(inode_);
-    files_[fh->get_name()] = fh;
+
+    // Update file's internal state for its new location and name.
+    removed_file->set_logic_path(join_paths(logic_path_, new_name));
+    removed_file->set_parent_inode(inode_);
+
+    // Add the removed file to this directory.
+    files_[new_name] = removed_file;
     return Status::OK();
 }
 
@@ -301,7 +310,8 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
 
     if (attr.mode() & S_IFDIR) {
         // it's a directory
-        auto new_dir = std::make_unique<Directory>(inode_, inode, name, mount_path_, metadata_, storage_);
+        auto new_dir = std::make_unique<Directory>(
+            inode_, inode, name, mount_path_, metadata_, storage_);
         auto s = new_dir->init();
         if (!s.ok()) {
             return s;
@@ -309,7 +319,8 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
         subdirs_[name] = std::move(new_dir);
     } else {
         // it's a file
-        auto new_file = std::make_shared<FileHandle>(inode_, inode, name, mount_path_, metadata_, storage_);
+        auto new_file = std::make_shared<FileHandle>(
+            inode_, inode, name, mount_path_, metadata_, storage_);
         auto s = new_file->init();
         if (!s.ok()) {
             return s;
@@ -322,7 +333,7 @@ Status Directory::create_inode(const uint64_t &inode, const std::string &name) {
 
 Status Directory::setattr(Attributes &attr) {
     // Update the file attributes in the metadata service.
-    auto s = metadata_->setattr(inode_, attr);
+    auto s = metadata_->setattr(attr);
     if (!s.ok()) {
         return s;
     }

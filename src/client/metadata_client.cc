@@ -390,7 +390,7 @@ Status MetadataClient::rename_dir(const uint64_t &old_p_inode,
     return Status::IOError("rename_dir() failed after retries");
 }
 
-Status MetadataClient::setattr(const uint64_t &inode, const Attributes &attr) {
+Status MetadataClient::setattr(const Attributes &attr) {
     Attributes req = attr;
     Attributes resp;
 
