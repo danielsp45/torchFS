@@ -4,7 +4,8 @@
 #include <string>
 #include <sys/stat.h>
 
-MetadataStorage::MetadataStorage() {
+Status MetadataStorage::init() {
+    // Set up options.
     rocksdb::Options options;
     options.create_if_missing = true;
     options.create_missing_column_families = true;
@@ -12,8 +13,7 @@ MetadataStorage::MetadataStorage() {
     rocksdb::ColumnFamilyOptions cf_options;
     cf_options.comparator = rocksdb::BytewiseComparator();
 
-    // Define the column families. The first element is the default column
-    // family.
+    // Define the column families.
     std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
     column_families.push_back(rocksdb::ColumnFamilyDescriptor(
         rocksdb::kDefaultColumnFamilyName, rocksdb::ColumnFamilyOptions()));
@@ -24,42 +24,91 @@ MetadataStorage::MetadataStorage() {
     column_families.push_back(
         rocksdb::ColumnFamilyDescriptor("nodes", cf_options));
 
+    // Open (or create) the DB.
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
-    rocksdb::Status status = rocksdb::DB::Open(options, "/tmp/torchdb",
-                                               column_families, &handles, &db_);
-    if (!status.ok()) {
-        throw std::runtime_error("Failed to open RocksDB: " +
-                                 status.ToString());
+    rocksdb::Status status =
+        rocksdb::DB::Open(options, db_path_, column_families, &handles, &db_);
+    if (!status.ok() || db_ == nullptr) {
+        std::cout << "[ERROR] Failed to open RocksDB: " << status.ToString()
+                  << std::endl;
+        return Status::IOError("Failed to open RocksDB: " + status.ToString());
+    } else {
+        std::cout << "[INFO] RocksDB opened successfully at /tmp/torchdb/"
+                  << std::endl;
     }
 
     // Map the handles to the corresponding member variables.
-    // Assuming order: 0 => default, 1 => inode, 2 => dentry, 3 => nodes
     cf_inode_ = handles[1];
     cf_dentry_ = handles[2];
     cf_nodes_ = handles[3];
 
-    // get the inode counter
-    // if it doesn't exist, create it
+    // 1) Verify on‐disk column families exactly match what we expect.
+    std::vector<std::string> existing_cfs;
+    rocksdb::Status st = rocksdb::DB::ListColumnFamilies(
+        rocksdb::DBOptions(), db_path_, &existing_cfs);
+    if (!st.ok()) {
+        std::cerr << "[ERROR] Cannot list column families: " << st.ToString()
+                  << std::endl;
+        return Status::IOError("ListColumnFamilies failed: " + st.ToString());
+    }
+    std::set<std::string> seen(existing_cfs.begin(), existing_cfs.end());
+    std::set<std::string> want = {rocksdb::kDefaultColumnFamilyName, "inode",
+                                  "dentry", "nodes"};
+    if (seen != want) {
+        std::cerr << "[ERROR] CF mismatch: on-disk:";
+        for (auto &n : existing_cfs)
+            std::cerr << " " << n;
+        std::cerr << "  expected:";
+        for (auto &n : want)
+            std::cerr << " " << n;
+        std::cerr << std::endl;
+        return Status::IOError(
+            "ColumnFamily set on disk does not match schema");
+    }
+    std::cout << "[INFO] Column families on disk are exactly as expected\n";
+
+    // 2) Initialize inode counter if missing.
     std::string value;
-    rocksdb::ReadOptions read_options2;
-    status = db_->Get(read_options2, cf_inode_, "_counter", &value);
-    if (status.IsNotFound()) {
-        rocksdb::WriteOptions write_options;
-        status =
-            db_->Put(write_options, cf_inode_, "_counter", std::to_string(1));
-        if (!status.ok()) {
-            throw std::runtime_error("Failed to create inode counter: " +
-                                     status.ToString());
+    rocksdb::ReadOptions ro;
+    st = db_->Get(ro, cf_inode_, "_counter", &value);
+    if (st.IsNotFound()) {
+        rocksdb::WriteOptions wo;
+        st = db_->Put(wo, cf_inode_, "_counter", "1");
+        if (!st.ok()) {
+            std::cerr << "[ERROR] Failed to create inode counter: "
+                      << st.ToString() << std::endl;
+            return Status::IOError("Failed to create inode counter: " +
+                                   st.ToString());
         }
+        std::cout << "[INFO] Inode counter initialized to 1\n";
+    } else if (!st.ok()) {
+        std::cerr << "[ERROR] Failed to get inode counter: " << st.ToString()
+                  << std::endl;
+        return Status::IOError("Failed to get inode counter: " + st.ToString());
+    } else {
+        std::cout << "[INFO] Inode counter exists: " << value << "\n";
     }
 
-    // check if the root inode exists
-    rocksdb::ReadOptions read_options;
-    rocksdb::Slice key(std::to_string(1));
-    status = db_->Get(read_options, cf_inode_, key, &value);
-    if (status.IsNotFound()) {
-        this->create_dir(0, "/");
+    // 3) Ensure root inode = 1 exists.
+    st = db_->Get(ro, cf_inode_, std::to_string(1), &value);
+    if (st.IsNotFound()) {
+        auto [s2, attr] = create_dir(0, "/");
+        if (!s2.ok()) {
+            std::cerr << "[ERROR] Failed to create root dir: " << s2.ToString()
+                      << std::endl;
+            return s2;
+        }
+        std::cout << "[INFO] Root directory created with inode=" << attr.inode()
+                  << "\n";
+    } else if (!st.ok()) {
+        std::cerr << "[ERROR] Failed to get root inode: " << st.ToString()
+                  << std::endl;
+        return Status::IOError("Failed to get root inode: " + st.ToString());
+    } else {
+        std::cout << "[INFO] Root inode exists\n";
     }
+
+    return Status::OK();
 }
 
 std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
@@ -67,6 +116,10 @@ std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
+    if (cf_inode_ == nullptr) {
+        std::cerr << "[ERROR] cf_inode_ is null" << std::endl;
+        return {Status::IOError("cf_inode_ is null"), Attributes()};
+    }
     rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
     if (!status.ok()) {
         if (status.IsNotFound()) {
@@ -88,25 +141,31 @@ std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
 
 std::pair<Status, std::vector<Dirent>>
 MetadataStorage::readdir(const uint64_t &inode) {
-    // Get the directory entries from the dentry column family
-    std::string prefix = std::to_string(inode) + ":";
+    const std::string prefix = std::to_string(inode) + ":";
     std::vector<Dirent> dirents;
 
     rocksdb::ReadOptions read_options;
     read_options.prefix_same_as_start = true;
 
-    std::unique_ptr<rocksdb::Iterator> it(
-        db_->NewIterator(read_options, cf_dentry_));
-    for (it->Seek(prefix); it->Valid() && it->key().starts_with(prefix);
-         it->Next()) {
-        Dirent dirent;
-        if (!dirent.ParseFromString(it->value().ToString())) {
-            return {Status::IOError("Failed to deserialize Dirent"), {}};
-        }
-        dirents.push_back(dirent);
+    auto [s, attr] = getattr(inode);
+    if (!s.ok()) {
+        std::cout << "Failed to get attributes for inode: " << inode
+                  << std::endl;
+        return {s, {}};
     }
 
-    return {Status::OK(), dirents};
+    auto it = std::unique_ptr<rocksdb::Iterator>(
+        db_->NewIterator(read_options, cf_dentry_));
+    for (it->Seek(prefix); it->Valid(); it->Next()) {
+        if (!it->key().starts_with(prefix))
+            break;
+        Dirent d;
+        if (!d.ParseFromString(it->value().ToString())) {
+            return {Status::IOError("Failed to deserialize Dirent"), {}};
+        }
+        dirents.push_back(std::move(d));
+    }
+    return {Status::OK(), std::move(dirents)};
 }
 
 std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {

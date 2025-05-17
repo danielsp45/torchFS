@@ -9,8 +9,10 @@
 
 class MetadataStorage {
   public:
-    MetadataStorage();
+    MetadataStorage(const std::string &db_path) : db_path_(db_path) {}
     ~MetadataStorage() = default;
+
+    Status init();
 
     std::pair<Status, Attributes> getattr(const uint64_t &inode);
     std::pair<Status, std::vector<Dirent>> readdir(const uint64_t &inode);
@@ -38,6 +40,7 @@ class MetadataStorage {
     rocksdb::ColumnFamilyHandle *cf_inode_;
     rocksdb::ColumnFamilyHandle *cf_dentry_;
     rocksdb::ColumnFamilyHandle *cf_nodes_;
+    std::string db_path_;
 
     uint64_t get_and_increment_counter();
 };

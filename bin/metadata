@@ -1,28 +1,39 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Go to project root
-BASE_DIR=$(dirname "${BASH_SOURCE[0]:-$0}")
-cd "${BASE_DIR}/.." || exit 127
-
-port=8000
-
+# Function to display help message
 function display_help() {
   cat <<EOF
 Usage: $(basename "$0") [options]
 
 This script starts the TorchFS metadata server.
 Options:
-  --port=<port>   (ignored: metadata server currently listens on 8000)
-  -h, --help      Show this help message.
+  --port=<port>     Port number for the metadata server (default: 8000)
+  --conf=<conf>     Initial configuration of the replication group 
+                    (e.g. "127.0.0.1:8000,127.0.0.1:9000")
+  --path=<path>     Path to the metadata server storage (default: /tmp/metadata)
+  -h, --help        Show this help message.
 EOF
 }
 
-# Parse options
+# Default values
+port=8000
+conf=""
+path="/tmp/metadata"
+
+# Parse command-line options
 while [[ $# -gt 0 ]]; do
-  case $1 in
+  case "$1" in
     --port=*)
       port="${1#*=}"
+      shift
+      ;;
+    --conf=*)
+      conf="${1#*=}"
+      shift
+      ;;
+    --path=*)
+      path="${1#*=}"
       shift
       ;;
     -h|--help)
@@ -38,4 +49,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Starting metadata server (listening on port ${port})..."
-./build/metadata
+echo "Using conf: ${conf}"
+
+# Change to project root (assumes this script is in the bin/ directory)
+BASE_DIR="$(dirname "${BASH_SOURCE[0]}")"
+cd "${BASE_DIR}/.." || exit 127
+
+# Launch the metadata server binary with the provided flags.
+./build/metadata -port "${port}" -conf "${conf}" --path "${path}"
