@@ -8,7 +8,7 @@ void MetadataServiceImpl::open(google::protobuf::RpcController *cntl,
     (void)cntl;
     std::cout << "[open] Request received for inode: " << request->inode()
               << std::endl;
-    kv_store_->open(request, response, done);
+    state_machine_->open(request, response, done);
 }
 
 void MetadataServiceImpl::getattr(google::protobuf::RpcController *cntl,
@@ -18,7 +18,7 @@ void MetadataServiceImpl::getattr(google::protobuf::RpcController *cntl,
     (void)cntl;
     std::cout << "[getattr] Request received for inode: " << request->inode()
               << std::endl;
-    kv_store_->getattr(request, response, done);
+    state_machine_->getattr(request, response, done);
 }
 
 void MetadataServiceImpl::readdir(google::protobuf::RpcController *cntl,
@@ -28,7 +28,7 @@ void MetadataServiceImpl::readdir(google::protobuf::RpcController *cntl,
     (void)cntl;
     std::cout << "[readdir] Request received for inode: " << request->inode()
               << std::endl;
-    kv_store_->readdir(request, response, done);
+    state_machine_->readdir(request, response, done);
 }
 
 void MetadataServiceImpl::setattr(google::protobuf::RpcController *cntl,
@@ -38,7 +38,7 @@ void MetadataServiceImpl::setattr(google::protobuf::RpcController *cntl,
     (void)cntl;
     std::cout << "[setattr] Request received for inode: " << request->inode()
               << std::endl;
-    kv_store_->setattr(request, response, done);
+    state_machine_->setattr(request, response, done);
 }
 
 void MetadataServiceImpl::createfile(google::protobuf::RpcController *cntl,
@@ -49,7 +49,7 @@ void MetadataServiceImpl::createfile(google::protobuf::RpcController *cntl,
     std::cout << "[createfile] Request received for parent inode: "
               << request->p_inode() << ", name: " << request->name()
               << std::endl;
-    kv_store_->createfile(request, response, done);
+    state_machine_->createfile(request, response, done);
 }
 
 void MetadataServiceImpl::createdir(google::protobuf::RpcController *cntl,
@@ -60,7 +60,7 @@ void MetadataServiceImpl::createdir(google::protobuf::RpcController *cntl,
     std::cout << "[createdir] Request received for parent inode: "
               << request->p_inode() << ", name: " << request->name()
               << std::endl;
-    kv_store_->createdir(request, response, done);
+    state_machine_->createdir(request, response, done);
 }
 
 void MetadataServiceImpl::removefile(google::protobuf::RpcController *cntl,
@@ -71,7 +71,7 @@ void MetadataServiceImpl::removefile(google::protobuf::RpcController *cntl,
     std::cout << "[removefile] Request received for parent inode: "
               << request->p_inode() << ", inode: " << request->inode()
               << ", name: " << request->name() << std::endl;
-    kv_store_->removefile(request, response, done);
+    state_machine_->removefile(request, response, done);
 }
 
 void MetadataServiceImpl::removedir(google::protobuf::RpcController *cntl,
@@ -82,7 +82,7 @@ void MetadataServiceImpl::removedir(google::protobuf::RpcController *cntl,
     std::cout << "[removedir] Request received for parent inode: "
               << request->p_inode() << ", inode: " << request->inode()
               << ", name: " << request->name() << std::endl;
-    kv_store_->removedir(request, response, done);
+    state_machine_->removedir(request, response, done);
 }
 
 void MetadataServiceImpl::renamefile(google::protobuf::RpcController *cntl,
@@ -91,7 +91,7 @@ void MetadataServiceImpl::renamefile(google::protobuf::RpcController *cntl,
                                      google::protobuf::Closure *done) {
     (void)cntl;
     std::cout << "[renamefile] Request received for inode: " << std::endl;
-    kv_store_->renamefile(request, response, done);
+    state_machine_->renamefile(request, response, done);
 }
 
 void MetadataServiceImpl::renamedir(google::protobuf::RpcController *cntl,
@@ -100,5 +100,5 @@ void MetadataServiceImpl::renamedir(google::protobuf::RpcController *cntl,
                                     google::protobuf::Closure *done) {
     (void)cntl;
     std::cout << "[renamedir] Request received for inode: " << std::endl;
-    kv_store_->renamedir(request, response, done);
+    state_machine_->renamedir(request, response, done);
 }

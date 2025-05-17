@@ -25,9 +25,9 @@ int main(int argc, char *argv[]) {
     butil::AtExitManager exit_manager;
 
     brpc::Server server;
-    KVStore kv_store;
+    MetadataStateMachine state_machine;
 
-    MetadataServiceImpl metadata_service(&kv_store);
+    MetadataServiceImpl metadata_service(&state_machine);
 
     // Add the metadata service into the RPC server.
     if (server.AddService(&metadata_service, brpc::SERVER_OWNS_SERVICE) != 0) {
@@ -42,8 +42,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Start the KVStore to print initialization logs.
-    if (kv_store.start(FLAGS_port, FLAGS_conf, FLAGS_path) != 0) {
-        LOG(ERROR) << "Failed to start KVStore";
+    if (state_machine.start(FLAGS_port, FLAGS_conf, FLAGS_path) != 0) {
+        LOG(ERROR) << "Failed to start MetadataStateMachine";
         return -1;
     }
 
@@ -62,9 +62,9 @@ int main(int argc, char *argv[]) {
     }
 
     LOG(INFO) << "Metadata service is going to quit";
-    kv_store.shutdown();
+    state_machine.shutdown();
     server.Stop(0);
-    kv_store.join();
+    state_machine.join();
     server.Join();
     return 0;
 }

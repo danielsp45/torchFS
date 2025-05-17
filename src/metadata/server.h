@@ -6,7 +6,8 @@
 
 class MetadataServiceImpl : public MetadataService {
   public:
-    MetadataServiceImpl(KVStore *kv_store) : kv_store_(kv_store) {}
+    MetadataServiceImpl(MetadataStateMachine *state_machine)
+        : state_machine_(state_machine) {}
     virtual ~MetadataServiceImpl() {}
 
     // RPC method declarations
@@ -46,5 +47,6 @@ class MetadataServiceImpl : public MetadataService {
               ::google::protobuf::Closure *done);
 
   private:
-    KVStore *kv_store_; // Pointer to the KVStore instance
+    MetadataStateMachine
+        *state_machine_; // Pointer to the MetadataStateMachine instance
 };
