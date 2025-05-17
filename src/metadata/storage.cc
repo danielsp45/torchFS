@@ -112,7 +112,6 @@ Status MetadataStorage::init() {
 }
 
 std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
-    // Get the file from the inode column family
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
@@ -120,15 +119,9 @@ std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
         std::cerr << "[ERROR] cf_inode_ is null" << std::endl;
         return {Status::IOError("cf_inode_ is null"), Attributes()};
     }
-    rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
-    if (!status.ok()) {
-        if (status.IsNotFound()) {
-            return {Status::NotFound("File not found"), Attributes()};
-        }
-        return {
-            Status::IOError("Failed to get file info: " + status.ToString()),
-            Attributes()};
-    }
+    Status s = get_inode(inode, value);
+    if (!s.ok())
+        return {s, Attributes()};
 
     // Deserialize the value into an Attributes object
     Attributes attr; // Use the namespace specified in your .proto file
@@ -169,19 +162,12 @@ MetadataStorage::readdir(const uint64_t &inode) {
 }
 
 std::pair<Status, FileInfo> MetadataStorage::open(const uint64_t &inode) {
-    // Get the file info from the nodes column family
     std::string value;
     rocksdb::ReadOptions read_options;
     rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Get(read_options, cf_inode_, key, &value);
-    if (!status.ok()) {
-        if (status.IsNotFound()) {
-            return {Status::NotFound("File not found"), FileInfo()};
-        }
-        return {
-            Status::IOError("Failed to get file info: " + status.ToString()),
-            FileInfo()};
-    }
+    Status s = get_inode(inode, value);
+    if (!s.ok())
+        return {s, FileInfo()};
 
     // Deserialize the value into a FileInfo object
     FileInfo file_info;
@@ -211,14 +197,9 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
         return {Status::IOError("Failed to serialize Attributes"), attr};
     }
 
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(attr.inode()));
-    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
-    if (!status.ok()) {
-        return {Status::IOError("Failed to create file inode: " +
-                                status.ToString()),
-                attr};
-    }
+    Status status = put_inode(attr.inode(), value);
+    if (!status.ok())
+        return {status, attr};
 
     // Create a new directory entry in the dentry column family
     Dirent dirent;
@@ -229,13 +210,9 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
         return {Status::IOError("Failed to serialize Dirent"), attr};
     }
 
-    key = rocksdb::Slice(std::to_string(p_inode) + ":" + name);
-    status = db_->Put(write_options, cf_dentry_, key, value);
-    if (!status.ok()) {
-        return {Status::IOError("Failed to create directory entry: " +
-                                status.ToString()),
-                attr};
-    }
+    status = put_dirent(p_inode, name, value);
+    if (!status.ok())
+        return {status, attr};
 
     // TODO: Also create a new entry in the nodes column family
 
@@ -261,18 +238,12 @@ MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
         return {Status::IOError("Failed to serialize Attributes"), attr};
     }
 
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(attr.inode()));
-    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
-    if (!status.ok()) {
-        return {
-            Status::IOError("Failed to create directory: " + status.ToString()),
-            attr};
-    }
+    Status status = put_inode(attr.inode(), value);
+    if (!status.ok())
+        return {status, attr};
 
-    // if the p_inode is 0, it means this is the root directory
-    // and we don't need to create a directory entry
     if (p_inode != 0) {
+        // Create a new directory entry in the dentry column family
         Dirent dirent;
         dirent.set_name(name);
         dirent.set_inode(attr.inode());
@@ -281,13 +252,9 @@ MetadataStorage::create_dir(const uint64_t &p_inode, const std::string &name) {
             return {Status::IOError("Failed to serialize Dirent"), attr};
         }
 
-        key = rocksdb::Slice(std::to_string(p_inode) + ":" + name);
-        status = db_->Put(write_options, cf_dentry_, key, value);
-        if (!status.ok()) {
-            return {Status::IOError("Failed to create directory entry: " +
-                                    status.ToString()),
-                    attr};
-        }
+        status = put_dirent(p_inode, name, value);
+        if (!status.ok())
+            return {status, attr};
     }
 
     return {Status::OK(), attr};
@@ -297,20 +264,14 @@ Status MetadataStorage::remove_file(const uint64_t &p_inode,
                                     const uint64_t &inode,
                                     const std::string &name) {
     // Remove the file from the inode column family
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Delete(write_options, cf_inode_, key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove file: " + status.ToString());
-    }
+    Status status = delete_inode(inode);
+    if (!status.ok())
+        return status;
 
     // Remove the directory entry from the dentry column family
-    std::string dentry_key = std::to_string(p_inode) + ":" + name;
-    status = db_->Delete(write_options, cf_dentry_, dentry_key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove directory entry: " +
-                               status.ToString());
-    }
+    status = delete_dirent(p_inode, name);
+    if (!status.ok())
+        return status;
 
     // TODO: Also remove the file in the nodes column family
 
@@ -321,21 +282,14 @@ Status MetadataStorage::remove_dir(const uint64_t &p_inode,
                                    const uint64_t &inode,
                                    const std::string &name) {
     // Remove the directory from the inode column family
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Delete(write_options, cf_inode_, key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove directory: " +
-                               status.ToString());
-    }
+    Status status = delete_inode(inode);
+    if (!status.ok())
+        return status;
 
     // Remove the directory entry from the dentry column family
-    std::string dentry_key = std::to_string(p_inode) + ":" + name;
-    status = db_->Delete(write_options, cf_dentry_, dentry_key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove directory entry: " +
-                               status.ToString());
-    }
+    status = delete_dirent(p_inode, name);
+    if (!status.ok())
+        return status;
 
     return Status::OK();
 }
@@ -356,20 +310,14 @@ Status MetadataStorage::rename_file(const uint64_t &old_p_inode,
     if (!attr.SerializeToString(&value)) {
         return Status::IOError("Failed to serialize Attributes");
     }
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to rename file: " + status.ToString());
-    }
+    Status status = put_inode(inode, value);
+    if (!status.ok())
+        return status;
 
     // remove the old entry in the dentry column family
-    std::string old_dentry_key = std::to_string(old_p_inode) + ":" + old_name;
-    status = db_->Delete(write_options, cf_dentry_, old_dentry_key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove old directory entry: " +
-                               status.ToString());
-    }
+    status = delete_dirent(old_p_inode, old_name);
+    if (!status.ok())
+        return status;
     // create a new entry in the dentry column family
     Dirent dirent;
     dirent.set_name(new_name);
@@ -377,12 +325,10 @@ Status MetadataStorage::rename_file(const uint64_t &old_p_inode,
     if (!dirent.SerializeToString(&value)) {
         return Status::IOError("Failed to serialize Dirent");
     }
-    std::string new_dentry_key = std::to_string(new_p_inode) + ":" + new_name;
-    status = db_->Put(write_options, cf_dentry_, new_dentry_key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to create new directory entry: " +
-                               status.ToString());
-    }
+    status = put_dirent(new_p_inode, new_name, value);
+    if (!status.ok())
+        return status;
+
     return Status::OK();
 }
 
@@ -401,35 +347,15 @@ Status MetadataStorage::rename_dir(const uint64_t &old_p_inode,
     if (!attr.SerializeToString(&value)) {
         return Status::IOError("Failed to serialize Attributes");
     }
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to rename directory: " +
-                               status.ToString());
-    }
-
-    // remove the old entry in the dentry column family
-    std::string old_dentry_key = std::to_string(old_p_inode) + ":" + old_name;
-    status = db_->Delete(write_options, cf_dentry_, old_dentry_key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove old directory entry: " +
-                               status.ToString());
-    }
-    // create a new entry in the dentry column family
-    Dirent dirent;
-    dirent.set_name(new_name);
-    dirent.set_inode(inode);
-    if (!dirent.SerializeToString(&value)) {
-        return Status::IOError("Failed to serialize Dirent");
-    }
-    std::string new_dentry_key = std::to_string(new_p_inode) + ":" + new_name;
-    status = db_->Put(write_options, cf_dentry_, new_dentry_key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to create new directory entry: " +
-                               status.ToString());
-    }
-
+    Status status = put_inode(inode, value);
+    if (!status.ok())
+        return status;
+    status = delete_dirent(old_p_inode, old_name);
+    if (!status.ok())
+        return status;
+    status = put_dirent(new_p_inode, new_name, value);
+    if (!status.ok())
+        return status;
     return Status::OK();
 }
 
@@ -439,13 +365,9 @@ Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
     if (!attr.SerializeToString(&value)) {
         return Status::IOError("Failed to serialize Attributes");
     }
-    rocksdb::WriteOptions write_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Put(write_options, cf_inode_, key, value);
-    if (!status.ok()) {
-        return Status::IOError("Failed to update file attributes: " +
-                               status.ToString());
-    }
+    Status status = put_inode(inode, value);
+    if (!status.ok())
+        return status;
 
     return Status::OK();
 }
@@ -473,4 +395,65 @@ uint64_t MetadataStorage::get_and_increment_counter() {
                                  status.ToString());
     }
     return counter;
+}
+
+// --------------- new helper implementations ---------------
+Status MetadataStorage::get_inode(uint64_t inode, std::string &value) {
+    rocksdb::ReadOptions ro;
+    rocksdb::Status s = db_->Get(ro, cf_inode_, std::to_string(inode), &value);
+    if (s.IsNotFound())
+        return Status::NotFound("inode not found");
+    if (!s.ok())
+        return Status::IOError("get_inode failed: " + s.ToString());
+    return Status::OK();
+}
+
+Status MetadataStorage::get_dirent(uint64_t parent_inode,
+                                   const std::string &name,
+                                   std::string &value) {
+    rocksdb::ReadOptions ro;
+    std::string key = std::to_string(parent_inode) + ":" + name;
+    rocksdb::Status s = db_->Get(ro, cf_dentry_, key, &value);
+    if (s.IsNotFound())
+        return Status::NotFound("dirent not found");
+    if (!s.ok())
+        return Status::IOError("get_dirent failed: " + s.ToString());
+    return Status::OK();
+}
+
+Status MetadataStorage::put_inode(uint64_t inode, const std::string &value) {
+    rocksdb::WriteOptions wo;
+    rocksdb::Status s = db_->Put(wo, cf_inode_, std::to_string(inode), value);
+    if (!s.ok())
+        return Status::IOError("put_inode failed: " + s.ToString());
+    return Status::OK();
+}
+
+Status MetadataStorage::delete_inode(uint64_t inode) {
+    rocksdb::WriteOptions wo;
+    rocksdb::Status s = db_->Delete(wo, cf_inode_, std::to_string(inode));
+    if (!s.ok())
+        return Status::IOError("delete_inode failed: " + s.ToString());
+    return Status::OK();
+}
+
+Status MetadataStorage::put_dirent(uint64_t parent_inode,
+                                   const std::string &name,
+                                   const std::string &value) {
+    rocksdb::WriteOptions wo;
+    std::string key = std::to_string(parent_inode) + ":" + name;
+    rocksdb::Status s = db_->Put(wo, cf_dentry_, key, value);
+    if (!s.ok())
+        return Status::IOError("put_dirent failed: " + s.ToString());
+    return Status::OK();
+}
+
+Status MetadataStorage::delete_dirent(uint64_t parent_inode,
+                                      const std::string &name) {
+    rocksdb::WriteOptions wo;
+    std::string key = std::to_string(parent_inode) + ":" + name;
+    rocksdb::Status s = db_->Delete(wo, cf_dentry_, key);
+    if (!s.ok())
+        return Status::IOError("delete_dirent failed: " + s.ToString());
+    return Status::OK();
 }
