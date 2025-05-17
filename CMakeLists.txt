@@ -43,6 +43,7 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 # ──────────────────────────────────────
 file(GLOB CLIENT_SOURCES   src/client/*.cc)
 file(GLOB METADATA_SOURCES src/metadata/*.cc)
+file(GLOB STORAGE_SOURCES  src/storage/*.cc)
 file(GLOB COMMON_SOURCES   src/common/*.cc)
 
 # ──────────────────────────────────────
@@ -86,4 +87,23 @@ target_link_libraries(metadata PRIVATE
     unofficial::braft::braft-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
     RocksDB::rocksdb
+)
+
+# ──────────────────────────────────────
+# storage (Erasure Coding) binary
+# ──────────────────────────────────────
+
+add_executable(storage
+    ${STORAGE_SOURCES}
+    ${COMMON_SOURCES}
+    ${PROTO_SRCS})
+
+target_include_directories(storage PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    src/include)
+
+target_link_libraries(storage PRIVATE
+    gflags::gflags
+    unofficial::brpc::brpc-static
+    protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
 )

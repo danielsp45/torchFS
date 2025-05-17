@@ -15,10 +15,11 @@ class Directory {
   public:
     Directory(const uint64_t &p_inode, const uint64_t &inode,
               const std::string &logic_path, const std::string &mount_path,
-              std::shared_ptr<MetadataClient> metadata_client)
+              std::shared_ptr<MetadataClient> metadata_client,
+              std::shared_ptr<StorageClient> storage_client)
         : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
           mount_path_(mount_path), subdirs_(), files_(),
-          metadata_(metadata_client) {}
+          metadata_(metadata_client), storage_(storage_client) {}
 
     ~Directory() = default;
 
@@ -77,6 +78,7 @@ class Directory {
     std::map<std::string, std::shared_ptr<FileHandle>>
         files_; // File handles in the directory
     std::shared_ptr<MetadataClient> metadata_;
+    std::shared_ptr<StorageClient> storage_;
 
     Status create_inode(const uint64_t &inode, const std::string &name);
 
