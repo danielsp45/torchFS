@@ -10,6 +10,12 @@ set(CMAKE_CXX_EXTENSIONS  OFF)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra -Wpedantic)
+elseif(MSVC)
+    add_compile_options(/W4)
+endif()
+
 # ──────────────────────────────────────
 # FUSE (pkg-config)
 # ──────────────────────────────────────
@@ -59,6 +65,7 @@ target_link_libraries(torchfs PRIVATE
     ${FUSE_LIBRARIES}
     gflags::gflags
     unofficial::brpc::brpc-static
+    unofficial::braft::braft-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
     RocksDB::rocksdb)
 
@@ -77,6 +84,7 @@ target_include_directories(metadata PRIVATE
 target_link_libraries(metadata PRIVATE
     gflags::gflags
     unofficial::brpc::brpc-static
+    unofficial::braft::braft-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
     RocksDB::rocksdb
 )

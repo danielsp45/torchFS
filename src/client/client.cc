@@ -18,6 +18,12 @@ int main(int argc, char *argv[]) {
 
     std::string local_path = "/home/vagrant/server";
     StorageEngine *se = new StorageEngine(local_path);
+    Status s = se->init();
+    if (!s.ok()) {
+        std::cerr << "Failed to initialize storage engine: " << s.ToString()
+                  << std::endl;
+        return -1;
+    }
 
     int ret = fuse_main(new_argc, new_argv, &torch_oper, se);
 
