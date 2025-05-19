@@ -1,8 +1,8 @@
 #include "storage.h"
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <sys/stat.h>
+#include <random>
 
 MetadataStorage::MetadataStorage() {
     rocksdb::Options options;
@@ -28,8 +28,7 @@ MetadataStorage::MetadataStorage() {
     rocksdb::Status status = rocksdb::DB::Open(options, "/tmp/torchdb",
                                                column_families, &handles, &db_);
     if (!status.ok()) {
-        throw std::runtime_error("Failed to open RocksDB: " +
-                                 status.ToString());
+        throw std::runtime_error("Failed to open RocksDB: " + status.ToString());
     }
 
     // Map the handles to the corresponding member variables.
@@ -60,6 +59,9 @@ MetadataStorage::MetadataStorage() {
     if (status.IsNotFound()) {
         this->create_dir(0, "/");
     }
+
+    // StorageNodes
+    storage_nodes_ = {"node1", "node2", "node3", "node4", "node5"};
 }
 
 std::pair<Status, Attributes> MetadataStorage::getattr(const uint64_t &inode) {
@@ -178,7 +180,21 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
                 attr};
     }
 
-    // TODO: Also create a new entry in the nodes column family
+    // Create a new entry in the nodes column family
+    ChunksLocation chunks;
+    chunks.add_chunk_nodes(get_random_node());
+    // parity is empty
+
+    std::string chunks_value;
+    if (!chunks.SerializeToString(&chunks_value)) {
+        return {Status::IOError("Failed to serialize ChunksLocation"), attr};
+    }
+    
+    key = rocksdb::Slice(std::to_string(attr.inode()));
+    status = db_->Put(write_options, cf_nodes_, key, chunks_value);
+    if (!status.ok()) {
+        return {Status::IOError("Failed to create file node entry: " + status.ToString()), attr};
+    }
 
     return {Status::OK(), attr};
 }
@@ -391,6 +407,25 @@ Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
     return Status::OK();
 }
 
+std::pair<Status, ChunksLocation> MetadataStorage::get_chunks(const uint64_t &inode) {
+    std::string value;
+    rocksdb::ReadOptions read_options;
+    rocksdb::Slice key(std::to_string(inode));
+    rocksdb::Status status = db_->Get(read_options, cf_nodes_, key, &value);
+    if (!status.ok()) {
+        if (status.IsNotFound()) {
+            return {Status::NotFound("File not found"), ChunksLocation()};
+        }
+        return {Status::IOError("Failed to get file info: " + status.ToString()), ChunksLocation()};
+    }
+
+    ChunksLocation chunks;
+    if (!chunks.ParseFromString(value)) {
+        return {Status::IOError("Failed to deserialize ChunksLocation"), ChunksLocation()};
+    }
+    return {Status::OK(), chunks};
+}
+
 uint64_t MetadataStorage::get_and_increment_counter() {
     // read the current counter, store that value, and increment it
     rocksdb::ReadOptions read_options;
@@ -414,4 +449,14 @@ uint64_t MetadataStorage::get_and_increment_counter() {
                                  status.ToString());
     }
     return counter;
+}
+
+std::string MetadataStorage::get_random_node() {
+    if (storage_nodes_.empty()) {
+        throw std::runtime_error("No active nodes available.");
+    }
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, storage_nodes_.size() - 1);
+    return storage_nodes_[dis(gen)];
 }

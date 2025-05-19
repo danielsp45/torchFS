@@ -1,6 +1,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -29,7 +30,12 @@ Status FileHandle::destroy() {
         return s;
     }
 
-    return storage_->remove_file(std::to_string(inode_));
+    auto [meta_st, chunks] = metadata_->get_chunks(inode_);
+    if (!meta_st.ok()) {
+        return meta_st;
+    }
+
+    return storage_->remove_file(chunks.chunk_nodes(0), std::to_string(inode_));
 }
 
 Status FileHandle::open(int flags, mode_t mode) {
@@ -135,8 +141,14 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
         }
     }
 
+    auto [meta_st, chunks] = metadata_->get_chunks(inode_);
+    if (!meta_st.ok()) {
+        return meta_st;
+    }
+
+    std::string server = chunks.chunk_nodes(0);
     std::string file_id = std::to_string(inode_);
-    auto [st, data] = storage_->read(file_id, offset, size);
+    auto [st, data] = storage_->read(server, file_id, offset, size);
     if (!st.ok()) {
         return st;
     }
@@ -156,12 +168,18 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
         }
     }
     
+    auto [meta_st, chunks] = metadata_->get_chunks(inode_);
+    if (!meta_st.ok()) {
+        return meta_st;
+    }
+
+    std::string server = chunks.chunk_nodes(0);
     std::string file_id = std::to_string(inode_);
     Data data;
     data.set_payload(src.data());
     data.set_len(count);
 
-    auto [st, bytes_written] = storage_->write(file_id, data, offset);
+    auto [st, bytes_written] = storage_->write(server, file_id, data, offset);
     if (!st.ok()) {
         return st;
     }

@@ -33,11 +33,15 @@ class MetadataStorage {
 
     Status setattr(const uint64_t &inode, const Attributes &attr);
 
+    std::pair<Status, ChunksLocation> get_chunks(const uint64_t &inode);
+
   private:
     rocksdb::DB *db_; // RocksDB instance for metadata storage.
     rocksdb::ColumnFamilyHandle *cf_inode_;
     rocksdb::ColumnFamilyHandle *cf_dentry_;
     rocksdb::ColumnFamilyHandle *cf_nodes_;
+    std::vector<std::string> storage_nodes_;
 
     uint64_t get_and_increment_counter();
+    std::string get_random_node();
 };

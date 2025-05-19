@@ -152,3 +152,14 @@ Status MetadataClient::setattr(const uint64_t &inode, const Attributes &attr) {
     stub_->setattr(&cntl, &req, &resp, nullptr);
     return cntl.Failed() ? Status::IOError(cntl.ErrorText()) : Status::OK();
 }
+
+std::pair<Status, ChunksLocation> MetadataClient::get_chunks(const uint64_t &inode) {
+    ChunksRequest req;
+    req.set_inode(inode);
+    ChunksLocation resp;
+    brpc::Controller cntl;
+    stub_->getchunks(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed())
+        return {Status::IOError(cntl.ErrorText()), ChunksLocation()};
+    return {Status::OK(), resp};
+}

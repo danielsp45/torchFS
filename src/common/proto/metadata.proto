@@ -58,6 +58,15 @@ message RenameRequest {
   required string new_name    = 4;
 }
 
+message ChunksRequest {
+  required uint64 inode = 1;
+}
+
+message ChunksLocation {
+  repeated string chunk_nodes   = 1;
+  repeated string parity_nodes  = 2;
+}
+
 service MetadataService {
   rpc getattr     (InodeRequest)   returns (Attributes);
   rpc setattr     (Attributes)     returns (Attributes);
@@ -69,4 +78,5 @@ service MetadataService {
   rpc renamefile  (RenameRequest)  returns (google.protobuf.Empty);
   rpc renamedir   (RenameRequest)  returns (google.protobuf.Empty);
   rpc open        (InodeRequest)   returns (FileInfo);
+  rpc getchunks   (ChunksRequest)  returns (ChunksLocation);
 }
