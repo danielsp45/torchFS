@@ -74,11 +74,11 @@ def acesses_graph():
 
     # Highlight region legend entries
     highlight_patches = [
-        Patch(facecolor='yellow', alpha=0.18, label='Tied to file size'),
-        Patch(facecolor='red', alpha=0.18, label='Tied to file size and file count'),
-        Patch(facecolor='green', alpha=0.18, label='Tied to epoch count'),
+        Patch(facecolor='magenta', alpha=0.18, label='Fixed usage'),
         Patch(facecolor='cyan', alpha=0.18, label='Tied to file count'),
-        Patch(facecolor='magenta', alpha=0.18, label='Fixed usage')
+        Patch(facecolor='green', alpha=0.18, label='Tied to epoch count'),
+        Patch(facecolor='red', alpha=0.18, label='Tied to file size and file count'),
+        Patch(facecolor='yellow', alpha=0.18, label='Tied to file size')
     ]
 
     # Combine all handles
