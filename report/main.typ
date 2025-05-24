@@ -1,3 +1,4 @@
+#import "@preview/lilaq:0.3.0" as lq : *
 #import "lib.typ": *
 
 #let author1 = (
@@ -74,6 +75,18 @@ After evaluation, we found the PyTorch access pattern to be as follows:
 5. When all files are fully read, the epoch ends.
 6. After each epoch, a small number of files are opened and read sequentially, presumably for validation purposes.
 7. A new epoch starts and the process repeats.
+
+Below is a bar chart that plots the operation count for each dataset.
+We discovered that the acess pattern varies accross operations:
+- `Readdir` and `Create` are used a fixed (and small) ammount of times 
+- `Open` and `Close` are proportional to the number of files in the dataset (and therefore the number of epochs)
+- `Write` is tied mostly to epoch count, but also to the number of files
+- `Getattr` is tied both to the file size and file count, as it was called for every open, close and also every two reads
+- `Read` is tied to the file size (or count if the file is smaller than a chunk)
+
+#figure(
+  image("images/acesses_graph.svg")
+)
 
 === Insights
 
