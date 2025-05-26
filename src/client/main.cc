@@ -7,10 +7,9 @@ int main(int argc, char *argv[]) {
     char *new_argv[MAX_ARGS];
 
     umask(0);
-    int fill_dir_plus;
     for (i = 0, new_argc = 0; (i < argc) && (new_argc < MAX_ARGS); i++) {
         if (!strcmp(argv[i], "--plus")) {
-            fill_dir_plus = FUSE_FILL_DIR_PLUS;
+            // Ignored --plus argument.
         } else {
             new_argv[new_argc++] = argv[i];
         }
@@ -18,8 +17,14 @@ int main(int argc, char *argv[]) {
 
     std::string local_path = "/home/vagrant/server";
     StorageEngine *se = new StorageEngine(local_path);
+    Status s = se->init();
+    if (!s.ok()) {
+        std::cerr << "Failed to initialize storage engine: " << s.ToString()
+                  << std::endl;
+        return -1;
+    }
 
-    int ret = fuse_main(new_argc, new_argv, &torch_oper, se);
+    fuse_main(new_argc, new_argv, &torch_oper, se);
 
     delete se;
     return 0;

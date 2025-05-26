@@ -3,10 +3,9 @@
 
 #include "metadata.pb.h"
 #include "metadata_client.h"
-#include "storage.pb.h"
-#include "storage_client.h"
 #include "slice.h"
 #include "status.h"
+#include "storage_client.h"
 #include "util.h"
 #include <fcntl.h>
 #include <memory>
@@ -19,14 +18,14 @@ class FileHandle {
                std::string logic_path, std::string mount_path,
                std::shared_ptr<MetadataClient> metadata,
                std::shared_ptr<StorageClient> storage)
-        : p_inode_(p_inode), inode_(inode), metadata_(metadata), storage_(storage),
-          logic_path_(logic_path), mount_path_(mount_path), fd_(-1) {}
+        : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
+          mount_path_(mount_path), metadata_(metadata), storage_(storage),
+          fd_(-1) {}
 
     ~FileHandle() {}
 
     Status init();
     Status destroy();
-    Status open(int flags, mode_t mode);
     Status open(int flags);
     Status close();
     Status read(Slice &dst, size_t size, off_t offset);

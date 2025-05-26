@@ -12,7 +12,7 @@
 #include "util.h"
 
 Status FileHandle::init() {
-    if (inode_ == -1) {
+    if (inode_ == static_cast<uint64_t>(-1)) {
         // we need to create the file in the metadata too
         auto [s, attr] =
             metadata_->create_file(p_inode_, filename(logic_path_));
@@ -46,30 +46,6 @@ Status FileHandle::destroy() {
     }
 
     return storage_->remove_file(chunk_nodes, parity_nodes, std::to_string(inode_));
-}
-
-Status FileHandle::open(int flags, mode_t mode) {
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
-
-    // if the file doesn't exist, create it
-    if (::access(path.c_str(), F_OK) == -1) {
-        // File does not exist, create it
-        fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
-        if (fd_ == -1) {
-            return Status::IOError("Failed to create file: " +
-                                   std::string(strerror(errno)));
-        }
-    } else {
-        // File exists, open it
-        fd_ = ::open(path.c_str(), flags);
-        if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
-        }
-    }
-
-    return Status::OK();
 }
 
 Status FileHandle::open(int flags) {
@@ -147,7 +123,8 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
         std::string path = join_paths(mount_path_, inode_str);
         fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
         if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " + std::string(strerror(errno)));
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
         }
     }
 
@@ -185,7 +162,8 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
         std::string path = join_paths(mount_path_, inode_str);
         fd_ = ::open(path.c_str(), O_WRONLY | O_CREAT, 0644);
         if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " + std::string(strerror(errno)));
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
         }
     }
     
@@ -214,7 +192,7 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     if (!st.ok()) {
         return st;
     }
-    
+
     // Update metadata
     Attributes attr = metadata_->getattr(inode_).second;
     attr.set_size(100); // TODO: FIX THIS
@@ -240,7 +218,7 @@ Status FileHandle::sync() {
 
 Status FileHandle::setattr(Attributes &attr) {
     // Update the file attributes in the metadata service.
-    auto s = metadata_->setattr(inode_, attr);
+    auto s = metadata_->setattr(attr);
     if (!s.ok()) {
         return s;
     }

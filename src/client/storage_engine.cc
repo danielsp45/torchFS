@@ -10,6 +10,11 @@
 
 Status StorageEngine::init() {
     // Initialize the root directory
+    Status s = root_->init();
+    if (!s.ok()) {
+        return s;
+    }
+
     return Status::OK();
 }
 
@@ -26,7 +31,7 @@ Status StorageEngine::open(const std::string &path, int flags) {
     return Status::OK();
 }
 
-Status StorageEngine::create(const std::string &path, int flags, mode_t mode) {
+Status StorageEngine::create(const std::string &path) {
     auto [dir_name, file_name] = split_path_from_target(path);
     if (file_name.empty()) {
         return Status::InvalidArgument("Invalid path");
@@ -179,7 +184,7 @@ Status StorageEngine::rename(const std::string &src_path,
     return Status::NotFound("File or directory not found");
 }
 
-Status StorageEngine::mkdir(const std::string &path, mode_t mode) {
+Status StorageEngine::mkdir(const std::string &path) {
     auto [dir_name, new_dir_name] = split_path_from_target(path);
     if (new_dir_name.empty()) {
         return Status::InvalidArgument("Invalid path");

@@ -30,7 +30,7 @@ class MetadataClient {
     Status rename_dir(const uint64_t &old_p_inode, const uint64_t &new_p_inode,
                       const uint64_t &inode, const std::string &new_name);
 
-    Status setattr(const uint64_t &inode, const Attributes &attr);
+    Status setattr(const Attributes &attr);
 
     std::pair<Status, ChunksLocation> get_chunks(const uint64_t &inode);
 
