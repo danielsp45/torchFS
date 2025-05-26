@@ -18,6 +18,95 @@ pkg_check_modules(FUSE REQUIRED fuse3)
 include_directories(${FUSE_INCLUDE_DIRS})
 
 # ──────────────────────────────────────
+# liberasurecode
+# ──────────────────────────────────────
+find_package(liberasurecode CONFIG QUIET)
+if(NOT liberasurecode_FOUND)
+    # Manual detection for vcpkg manifest mode
+    message(STATUS "liberasurecode CONFIG not found, trying manual detection...")
+    
+    # Look in vcpkg manifest mode installation paths
+    set(VCPKG_INSTALLED_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed")
+    
+    find_path(LIBERASURECODE_INCLUDE_DIR
+        NAMES erasurecode.h liberasurecode.h
+        PATHS 
+            "${VCPKG_INSTALLED_DIR}/x64-linux/include"
+            "${CMAKE_PREFIX_PATH}/include"
+        PATH_SUFFIXES liberasurecode
+        NO_DEFAULT_PATH
+    )
+    
+    find_library(LIBERASURECODE_LIBRARY
+        NAMES erasurecode liberasurecode
+        PATHS 
+            "${VCPKG_INSTALLED_DIR}/x64-linux/lib"
+            "${CMAKE_PREFIX_PATH}/lib"
+        NO_DEFAULT_PATH
+    )
+    
+    # Look for additional required libraries
+    find_library(XOR_HD_LIBRARY
+        NAMES Xorcode xorcode
+        PATHS 
+            "${VCPKG_INSTALLED_DIR}/x64-linux/lib"
+            "${CMAKE_PREFIX_PATH}/lib"
+        NO_DEFAULT_PATH
+    )
+    
+    find_library(JERASURE_LIBRARY
+        NAMES Jerasure jerasure
+        PATHS 
+            "${VCPKG_INSTALLED_DIR}/x64-linux/lib"
+            "${CMAKE_PREFIX_PATH}/lib"
+        NO_DEFAULT_PATH
+    )
+    
+    find_library(GF_COMPLETE_LIBRARY
+        NAMES gf_complete
+        PATHS 
+            "${VCPKG_INSTALLED_DIR}/x64-linux/lib"
+            "${CMAKE_PREFIX_PATH}/lib"
+        NO_DEFAULT_PATH
+    )
+    
+    if(LIBERASURECODE_INCLUDE_DIR AND LIBERASURECODE_LIBRARY)
+        message(STATUS "Found liberasurecode:")
+        message(STATUS "  Include dir: ${LIBERASURECODE_INCLUDE_DIR}")
+        message(STATUS "  Library: ${LIBERASURECODE_LIBRARY}")
+        
+        # Collect all required libraries
+        set(LIBERASURECODE_LIBRARIES ${LIBERASURECODE_LIBRARY})
+        
+        if(XOR_HD_LIBRARY)
+            message(STATUS "  XOR HD Library: ${XOR_HD_LIBRARY}")
+            list(APPEND LIBERASURECODE_LIBRARIES ${XOR_HD_LIBRARY})
+        endif()
+        
+        if(JERASURE_LIBRARY)
+            message(STATUS "  Jerasure Library: ${JERASURE_LIBRARY}")
+            list(APPEND LIBERASURECODE_LIBRARIES ${JERASURE_LIBRARY})
+        endif()
+        
+        if(GF_COMPLETE_LIBRARY)
+            message(STATUS "  GF Complete Library: ${GF_COMPLETE_LIBRARY}")
+            list(APPEND LIBERASURECODE_LIBRARIES ${GF_COMPLETE_LIBRARY})
+        endif()
+        
+        # Create an imported target for consistency
+        add_library(liberasurecode::liberasurecode INTERFACE IMPORTED)
+        set_target_properties(liberasurecode::liberasurecode PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${LIBERASURECODE_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBERASURECODE_INCLUDE_DIR}"
+        )
+    else()
+        message(FATAL_ERROR "liberasurecode not found! 
+        Searched in: ${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/
+        Please check your vcpkg.json and ensure liberasurecode is installed.")
+    endif()
+endif()
+
+# ──────────────────────────────────────
 # Dependencies from vcpkg
 # ──────────────────────────────────────
 find_package(gflags           CONFIG REQUIRED)
@@ -60,7 +149,9 @@ target_link_libraries(torchfs PRIVATE
     gflags::gflags
     unofficial::brpc::brpc-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
-    RocksDB::rocksdb)
+    RocksDB::rocksdb
+    liberasurecode::liberasurecode
+)
 
 # ──────────────────────────────────────
 # metadata (Raft KV) binary
@@ -98,4 +189,5 @@ target_link_libraries(storage PRIVATE
     gflags::gflags
     unofficial::brpc::brpc-static
     protobuf::libprotoc protobuf::libprotobuf protobuf::libprotobuf-lite
+    liberasurecode::liberasurecode
 )

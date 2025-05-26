@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <vector>
 
+#define EC_K 4
+#define EC_M 2
+
 class MetadataStorage {
   public:
     MetadataStorage();
@@ -43,5 +46,5 @@ class MetadataStorage {
     std::vector<std::string> storage_nodes_;
 
     uint64_t get_and_increment_counter();
-    std::string get_random_node();
+    std::pair<std::vector<std::string>, std::vector<std::string>> get_random_nodes();
 };

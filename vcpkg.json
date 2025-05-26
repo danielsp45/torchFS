@@ -4,6 +4,7 @@
     "brpc",
     "gflags",
     "protobuf",
-    "rocksdb"
+    "rocksdb",
+    "liberasurecode"
   ]
 }

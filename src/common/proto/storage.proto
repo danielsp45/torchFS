@@ -5,24 +5,17 @@ option cc_generic_services = true;
 import "google/protobuf/empty.proto";
 
 message Data {
-    required bytes payload = 1;
-    required uint64 len = 2;
+    required uint64 len = 1;
+    required bytes payload = 2;
 }
 
 message ReadRequest {
-    required string file_id = 1;
-    optional uint64 offset = 2 [default = 0];
-    optional uint32 len = 3;
-}
-
-message ReadResponse {
-    required Data data = 1;
+    required string chunk_id = 1;
 }
 
 message WriteRequest {
-    required string file_id = 1;
+    required string chunk_id = 1;
     required Data data = 2;
-    optional uint64 offset = 3 [default = 0];
 }
 
 message WriteResponse {
@@ -30,11 +23,11 @@ message WriteResponse {
 }
 
 message DeleteRequest {
-    required string file_id = 1;
+    required string chunk_id = 1;
 }
 
 service StorageService {
-    rpc readfile    (ReadRequest)   returns (ReadResponse);
-    rpc writefile   (WriteRequest)  returns (WriteResponse);
-    rpc deletefile  (DeleteRequest) returns (google.protobuf.Empty);
+    rpc read_chunk    (ReadRequest)   returns (Data);
+    rpc write_chunk   (WriteRequest)  returns (WriteResponse);
+    rpc delete_chunk  (DeleteRequest) returns (google.protobuf.Empty);
 }

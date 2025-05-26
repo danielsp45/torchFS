@@ -4,6 +4,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utility>
+#include <vector>
 
 #include "file_handle.h"
 #include "slice.h"
@@ -35,7 +37,15 @@ Status FileHandle::destroy() {
         return meta_st;
     }
 
-    return storage_->remove_file(chunks.chunk_nodes(0), std::to_string(inode_));
+    std::vector<std::string> chunk_nodes, parity_nodes;
+    for (int i = 0; i < chunks.chunk_nodes_size(); i++) {
+        chunk_nodes.push_back(chunks.chunk_nodes(i));
+    }
+    for (int i = 0; i < chunks.parity_nodes_size(); i++) {
+        parity_nodes.push_back(chunks.parity_nodes(i));
+    }
+
+    return storage_->remove_file(chunk_nodes, parity_nodes, std::to_string(inode_));
 }
 
 Status FileHandle::open(int flags, mode_t mode) {
@@ -146,9 +156,20 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
         return meta_st;
     }
 
-    std::string server = chunks.chunk_nodes(0);
+    std::vector<std::string> chunk_nodes, parity_nodes;
+    for (int i = 0; i < chunks.chunk_nodes_size(); i++) {
+        chunk_nodes.push_back(chunks.chunk_nodes(i));
+    }
+    for (int i = 0; i < chunks.parity_nodes_size(); i++) {
+        parity_nodes.push_back(chunks.parity_nodes(i));
+    }
+
+    // TODO: handle offset and size properly
+    (void)offset;
+    (void)size;
+
     std::string file_id = std::to_string(inode_);
-    auto [st, data] = storage_->read(server, file_id, offset, size);
+    auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
     if (!st.ok()) {
         return st;
     }
@@ -173,26 +194,30 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
         return meta_st;
     }
 
-    std::string server = chunks.chunk_nodes(0);
+    std::vector<std::string> chunk_nodes, parity_nodes;
+    for (int i = 0; i < chunks.chunk_nodes_size(); i++) {
+        chunk_nodes.push_back(chunks.chunk_nodes(i));
+    }
+    for (int i = 0; i < chunks.parity_nodes_size(); i++) {
+        parity_nodes.push_back(chunks.parity_nodes(i));
+    }
+
     std::string file_id = std::to_string(inode_);
     Data data;
     data.set_payload(src.data());
     data.set_len(count);
 
-    auto [st, bytes_written] = storage_->write(server, file_id, data, offset);
+    // TODO: handle offset properly
+    (void)offset;
+
+    auto [st, bytes_written] = storage_->write(chunk_nodes, parity_nodes, file_id, data);
     if (!st.ok()) {
         return st;
     }
     
     // Update metadata
     Attributes attr = metadata_->getattr(inode_).second;
-    struct stat stat;
-    if (::fstat(fd_, &stat) == -1) {
-        return Status::IOError("Failed to get file size: " + std::string(strerror(errno)));
-    }
-    uint64_t new_size = offset + bytes_written;
-    uint64_t updated_size = std::max(attr.size(), new_size);
-    attr.set_size(updated_size);
+    attr.set_size(100); // TODO: FIX THIS
     
     Status s = setattr(attr);
     if (!s.ok()) {
