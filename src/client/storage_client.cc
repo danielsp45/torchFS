@@ -10,13 +10,9 @@
 
 StorageClient::StorageClient() {
     const std::vector<std::pair<std::string, std::string>> servers = {
-        {"node1", "127.0.0.1:9000"},
-        {"node2", "127.0.0.1:9001"},
-        {"node3", "127.0.0.1:9002"},
-        {"node4", "127.0.0.1:9003"},
-        {"node5", "127.0.0.1:9004"},
-        {"node6", "127.0.0.1:9005"}
-    };
+        {"node1", "127.0.0.1:9000"}, {"node2", "127.0.0.1:9001"},
+        {"node3", "127.0.0.1:9002"}, {"node4", "127.0.0.1:9003"},
+        {"node5", "127.0.0.1:9004"}, {"node6", "127.0.0.1:9005"}};
 
     for (const auto &entry : servers) {
         const std::string &server_name = entry.first;
@@ -27,19 +23,21 @@ StorageClient::StorageClient() {
         options.timeout_ms = 1000;
         options.max_retry = 3;
         if (node->channel.Init(address.c_str(), "", &options) != 0) {
-            throw std::runtime_error("Failed to initialize channel to " + address);
+            throw std::runtime_error("Failed to initialize channel to " +
+                                     address);
         }
         node->stub = std::make_unique<StorageService_Stub>(&node->channel);
         nodes_.emplace(server_name, std::move(node));
     }
 
     // Init Erasure Code
-    struct ec_args args = { 
+    struct ec_args args = {
         .k = EC_K, // data frags
         .m = EC_M  // parity frags
     };
 
-    ec_descriptor_ = liberasurecode_instance_create(EC_BACKEND_LIBERASURECODE_RS_VAND, &args);
+    ec_descriptor_ = liberasurecode_instance_create(
+        EC_BACKEND_LIBERASURECODE_RS_VAND, &args);
     if (!ec_descriptor_) {
         throw std::runtime_error("Failed to create erasure code instance\n");
     }
@@ -53,9 +51,10 @@ StorageClient::~StorageClient() {
     }
 }
 
-void printBytesAsHex(const unsigned char* bytes, size_t length) {
+void printBytesAsHex(const unsigned char *bytes, size_t length) {
     for (size_t i = 0; i < length; ++i) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
+        std::cout << std::hex << std::setw(2) << std::setfill('0')
+                  << (int)bytes[i] << " ";
     }
     std::cout << std::dec << std::endl; // Reset to decimal for future outputs
 }
@@ -63,7 +62,10 @@ void printBytesAsHex(const unsigned char* bytes, size_t length) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data_nodes, const std::vector<std::string> &parity_nodes, const std::string &file_id) {
+std::pair<Status, Data>
+StorageClient::read(const std::vector<std::string> &data_nodes,
+                    const std::vector<std::string> &parity_nodes,
+                    const std::string &file_id) {
     if (data_nodes.size() != EC_K || parity_nodes.size() != EC_M) {
         return {Status::IOError("Invalid node configuration"), Data()};
     }
@@ -83,7 +85,8 @@ std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data
 
         nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to read from data node " << node << ": " << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to read from data node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
         } else {
             std::cout << "Read data from node " << node << std::endl;
             fragment_data.push_back(resp.payload());
@@ -96,7 +99,8 @@ std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data
     }
 
     // Read from parity nodes if needed
-    for (int i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K; i++) {
+    for (int i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K;
+         i++) {
         const std::string &node = parity_nodes[i];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), Data()};
@@ -109,7 +113,8 @@ std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data
 
         nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to read from parity node " << node << ": " << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to read from parity node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
         } else {
             std::cout << "Read parity from node " << node << std::endl;
             fragment_data.push_back(resp.payload());
@@ -118,38 +123,31 @@ std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data
 
     // Check fragment count
     if (fragment_data.size() < EC_K) {
-        return {Status::IOError("Insufficient fragments for reconstruction"), Data()};
+        return {Status::IOError("Insufficient fragments for reconstruction"),
+                Data()};
     }
 
     // Convert to pointer array to match liberasurecode API
-    std::vector<char*> fragments;
-    for (auto& frag : fragment_data) {
-        fragments.push_back(const_cast<char*>(frag.data()));
+    std::vector<char *> fragments;
+    for (auto &frag : fragment_data) {
+        fragments.push_back(const_cast<char *>(frag.data()));
     }
 
     for (size_t i = 0; i < fragments.size(); i++) {
-        printBytesAsHex(
-            reinterpret_cast<const unsigned char*>(fragments[i]), 
-            frag_len
-        );
+        printBytesAsHex(reinterpret_cast<const unsigned char *>(fragments[i]),
+                        frag_len);
     }
 
     // Decode data
     char *decoded_data = nullptr;
     uint64_t decoded_len = 0;
-    
-    int res = liberasurecode_decode(
-        ec_descriptor_, 
-        fragments.data(), 
-        EC_K, 
-        frag_len, 
-        0, 
-        &decoded_data, 
-        &decoded_len
-    );
-    
+
+    int res = liberasurecode_decode(ec_descriptor_, fragments.data(), EC_K,
+                                    frag_len, 0, &decoded_data, &decoded_len);
+
     if (res != 0) {
-        return {Status::IOError("Decode failed: " + std::to_string(res)), Data()};
+        return {Status::IOError("Decode failed: " + std::to_string(res)),
+                Data()};
     }
 
     Data result;
@@ -166,8 +164,10 @@ std::pair<Status, Data> StorageClient::read(const std::vector<std::string> &data
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> &data_nodes, const std::vector<std::string> &parity_nodes, 
-                                                 const std::string &file_id, const Data &data) {
+std::pair<Status, uint64_t>
+StorageClient::write(const std::vector<std::string> &data_nodes,
+                     const std::vector<std::string> &parity_nodes,
+                     const std::string &file_id, const Data &data) {
     if (data_nodes.size() != EC_K || parity_nodes.size() != EC_M) {
         return {Status::IOError("Invalid node configuration"), 0};
     }
@@ -177,28 +177,25 @@ std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> 
     char **parity_fragments = nullptr;
     uint64_t fragment_len = 0;
 
-    int res = liberasurecode_encode(
-        ec_descriptor_, 
-        data.payload().data(),
-        data.len(),
-        &data_fragments,
-        &parity_fragments,
-        &fragment_len
-    );
-    
+    int res = liberasurecode_encode(ec_descriptor_, data.payload().data(),
+                                    data.len(), &data_fragments,
+                                    &parity_fragments, &fragment_len);
+
     if (res != 0) {
         return {Status::IOError("Encode failed: " + std::to_string(res)), 0};
     }
 
     for (size_t i = 0; i < EC_K + EC_M; i++) {
-        printBytesAsHex(
-            (i < EC_K) ? reinterpret_cast<const unsigned char*>(data_fragments[i]) : reinterpret_cast<const unsigned char*>(parity_fragments[i - EC_K]),
-            fragment_len
-        );
+        printBytesAsHex((i < EC_K) ? reinterpret_cast<const unsigned char *>(
+                                         data_fragments[i])
+                                   : reinterpret_cast<const unsigned char *>(
+                                         parity_fragments[i - EC_K]),
+                        fragment_len);
     }
 
     // Write to data nodes
     for (int i = 0; i < EC_K; i++) {
+        std::cout << "Writing to data node: " << data_nodes[i] << std::endl;
         std::string node = data_nodes[i];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};
@@ -216,7 +213,8 @@ std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> 
 
         nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to write to data node " << node << ": " << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to write to data node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
         } else {
             std::cout << "Wrote data to node " << node << std::endl;
         }
@@ -241,30 +239,35 @@ std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> 
 
         nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to write to parity node " << node << ": " << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to write to parity node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
         } else {
             std::cout << "Wrote parity to node " << node << std::endl;
         }
     }
 
-    res = liberasurecode_encode_cleanup(ec_descriptor_, data_fragments, parity_fragments);
+    res = liberasurecode_encode_cleanup(ec_descriptor_, data_fragments,
+                                        parity_fragments);
     if (res != 0) {
         return {Status::IOError("Encode cleanup failed!"), 0};
     }
-    return {Status::OK(), 0};//resp.bytes_written()};
+    return {Status::OK(), 0}; // resp.bytes_written()};
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Status StorageClient::remove_file(const std::vector<std::string> &data_nodes, const std::vector<std::string> &parity_nodes, const std::string &file_id) {
+Status StorageClient::remove_file(const std::vector<std::string> &data_nodes,
+                                  const std::vector<std::string> &parity_nodes,
+                                  const std::string &file_id) {
     if (data_nodes.size() != EC_K || parity_nodes.size() != EC_M) {
         return {Status::IOError("Invalid node configuration")};
     }
 
     // Remove from nodes
     for (size_t i = 0; i < EC_K + EC_M; i++) {
-        const std::string &node = (i < EC_K) ? data_nodes[i] : parity_nodes[i - EC_K];
+        const std::string &node =
+            (i < EC_K) ? data_nodes[i] : parity_nodes[i - EC_K];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node)};
         }
@@ -276,7 +279,8 @@ Status StorageClient::remove_file(const std::vector<std::string> &data_nodes, co
 
         nodes_[node]->stub->delete_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to delete file from node " << node << ": " << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to delete file from node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
             return Status::IOError(cntl.ErrorText());
         }
     }

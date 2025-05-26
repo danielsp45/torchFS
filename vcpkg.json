@@ -1,10 +1,6 @@
 {
   "dependencies": [
     "braft",
-    "brpc",
-    "gflags",
-    "protobuf",
-    "rocksdb",
-    "liberasurecode"
+    "brpc"
   ]
 }
