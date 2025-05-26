@@ -102,23 +102,3 @@ void MetadataServiceImpl::renamedir(google::protobuf::RpcController *cntl,
     std::cout << "[renamedir] Request received for inode: " << std::endl;
     kv_store_->renamedir(request, response, done);
 }
-
-void MetadataServiceImpl::getchunks(::google::protobuf::RpcController *cntl,
-                                    const ::ChunksRequest *request,
-                                    ::ChunksLocation *response,
-                                    ::google::protobuf::Closure *done) {
-    std::cout << "[getchunks] Request received for inode: " << request->inode()
-              << std::endl;
-    brpc::ClosureGuard done_guard(done);
-    auto [st, chunks] = storage_.get_chunks(request->inode());
-    if (!st.ok()) {
-        static_cast<brpc::Controller *>(cntl)->SetFailed(st.ToString());
-        return;
-    }
-    for (const auto &chunk : chunks.chunk_nodes()) {
-        *response->add_chunk_nodes() = chunk;
-    }
-    for (const auto &parity : chunks.parity_nodes()) {
-        *response->add_parity_nodes() = parity;
-    }
-}

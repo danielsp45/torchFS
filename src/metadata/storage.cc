@@ -1,9 +1,8 @@
 #include "storage.h"
 #include <cstdint>
+#include <iostream>
 #include <string>
 #include <sys/stat.h>
-#include <random>
-#include <vector>
 
 Status MetadataStorage::init() {
     // Set up options.
@@ -108,8 +107,6 @@ Status MetadataStorage::init() {
     } else {
         std::cout << "[INFO] Root inode exists\n";
     }
-
-    storage_nodes_ = {"node1", "node2", "node3", "node4", "node5"};
 
     return Status::OK();
 }
@@ -240,26 +237,7 @@ MetadataStorage::create_file(const uint64_t &p_inode, const std::string &name) {
                 attr};
     }
 
-    // Create a new entry in the nodes column family
-    ChunksLocation chunks;
-    auto random_nodes = get_random_nodes();
-    for (const auto &node : random_nodes.first) {
-        chunks.add_chunk_nodes(node);
-    }
-    for (const auto &node : random_nodes.second) {
-        chunks.add_parity_nodes(node);
-    }
-
-    std::string chunks_value;
-    if (!chunks.SerializeToString(&chunks_value)) {
-        return {Status::IOError("Failed to serialize ChunksLocation"), attr};
-    }
-    
-    key = rocksdb::Slice(std::to_string(attr.inode()));
-    status = db_->Put(write_options, cf_nodes_, key, chunks_value);
-    if (!status.ok()) {
-        return {Status::IOError("Failed to create file node entry: " + status.ToString()), attr};
-    }
+    // TODO: Also create a new entry in the nodes column family
 
     return {Status::OK(), attr};
 }
@@ -330,14 +308,11 @@ Status MetadataStorage::remove_file(const uint64_t &p_inode,
     std::string dentry_key = std::to_string(p_inode) + ":" + name;
     status = db_->Delete(write_options, cf_dentry_, dentry_key);
     if (!status.ok()) {
-        return Status::IOError("Failed to remove directory entry: " + status.ToString());
+        return Status::IOError("Failed to remove directory entry: " +
+                               status.ToString());
     }
 
-    // Remove the file from the nodes column family
-    status = db_->Delete(write_options, cf_nodes_, key);
-    if (!status.ok()) {
-        return Status::IOError("Failed to remove nodes entry: " + status.ToString());
-    }
+    // TODO: Also remove the file in the nodes column family
 
     return Status::OK();
 }
@@ -475,25 +450,6 @@ Status MetadataStorage::setattr(const uint64_t &inode, const Attributes &attr) {
     return Status::OK();
 }
 
-std::pair<Status, ChunksLocation> MetadataStorage::get_chunks(const uint64_t &inode) {
-    std::string value;
-    rocksdb::ReadOptions read_options;
-    rocksdb::Slice key(std::to_string(inode));
-    rocksdb::Status status = db_->Get(read_options, cf_nodes_, key, &value);
-    if (!status.ok()) {
-        if (status.IsNotFound()) {
-            return {Status::NotFound("File not found"), ChunksLocation()};
-        }
-        return {Status::IOError("Failed to get file info: " + status.ToString()), ChunksLocation()};
-    }
-
-    ChunksLocation chunks;
-    if (!chunks.ParseFromString(value)) {
-        return {Status::IOError("Failed to deserialize ChunksLocation"), ChunksLocation()};
-    }
-    return {Status::OK(), chunks};
-}
-
 uint64_t MetadataStorage::get_and_increment_counter() {
     // read the current counter, store that value, and increment it
     rocksdb::ReadOptions read_options;
@@ -517,20 +473,4 @@ uint64_t MetadataStorage::get_and_increment_counter() {
                                  status.ToString());
     }
     return counter;
-}
-
-std::pair<std::vector<std::string>, std::vector<std::string>> MetadataStorage::get_random_nodes() {
-    //if (storage_nodes_.size() < (EC_K + EC_M)) {
-    //    throw std::runtime_error("Not enough nodes available.");
-    //}
-    //static std::random_device rd;
-    //static std::mt19937 gen(rd());
-    //std::shuffle(storage_nodes_.begin(), storage_nodes_.end(), gen);
-//
-    //std::vector<std::string> data_nodes(storage_nodes_.begin(), storage_nodes_.begin() + EC_K);
-    //std::vector<std::string> parity_nodes(storage_nodes_.begin() + EC_K, storage_nodes_.begin() + EC_K + EC_M);
-    return { 
-        {"node1", "node2", "node3", "node4"}, 
-        {"node5", "node6"}
-    };
 }

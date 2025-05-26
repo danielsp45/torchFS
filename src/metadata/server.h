@@ -1,6 +1,5 @@
 #include "metadata.pb.h"
 #include "state_machine.h"
-#include "storage.h"
 #include <brpc/server.h>
 #include <google/protobuf/empty.pb.h>
 
@@ -42,13 +41,8 @@ class MetadataServiceImpl : public MetadataService {
                    ::google::protobuf::Empty *response,
                    ::google::protobuf::Closure *done);
     void open(::google::protobuf::RpcController *cntl,
-              const ::InodeRequest *request,
-              ::FileInfo *response,
+              const ::InodeRequest *request, ::FileInfo *response,
               ::google::protobuf::Closure *done);
-    void getchunks(::google::protobuf::RpcController *cntl,
-                   const ::ChunksRequest *request, 
-                   :: ChunksLocation *response,
-                   ::google::protobuf::Closure *done);
 
   private:
     KVStore *kv_store_; // Pointer to the KVStore instance
