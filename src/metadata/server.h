@@ -1,6 +1,5 @@
 #include "metadata.pb.h"
 #include "state_machine.h"
-#include "storage.h"
 #include <brpc/server.h>
 #include <google/protobuf/empty.pb.h>
 

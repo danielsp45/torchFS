@@ -14,11 +14,12 @@
 // ─── Hard-coded cluster settings ─────────────────────────────────────────────
 static const std::string kMetadataGroup = "kv_store";
 static const std::string kMetadataConf =
-    "127.0.2.1:8000:0,127.0.2.1:9000:1,127.0.2.1:7000:2,"; // adjust to your
-                                                           // peers
-static constexpr int kTimeoutMs = 1000;                    // RPC timeout
-static constexpr int kMaxRetries = 5;                      // retry attempts
-static constexpr int kRetryBackoffUs = 100000;             // 100 ms
+    // "127.0.2.1:8000:0,127.0.2.1:9000:1,127.0.2.1:7000:2,"; // adjust to your
+    "127.0.2.1:8000:0,";                       // adjust to your
+                                               // peers
+static constexpr int kTimeoutMs = 1000;        // RPC timeout
+static constexpr int kMaxRetries = 5;          // retry attempts
+static constexpr int kRetryBackoffUs = 100000; // 100 ms
 // ────────────────────────────────────────────────────────────────────────────────
 
 MetadataClient::MetadataClient(const std::string & /*server_addr*/) {
@@ -390,6 +391,7 @@ Status MetadataClient::rename_dir(const uint64_t &old_p_inode,
     return Status::IOError("rename_dir() failed after retries");
 }
 
+// setattr → RPC
 Status MetadataClient::setattr(const Attributes &attr) {
     Attributes req = attr;
     Attributes resp;
@@ -422,4 +424,16 @@ Status MetadataClient::setattr(const Attributes &attr) {
         return Status::OK();
     }
     return Status::IOError("setattr() failed after retries");
+}
+
+std::pair<Status, ChunksLocation>
+MetadataClient::get_chunks(const uint64_t &inode) {
+    ChunksRequest req;
+    req.set_inode(inode);
+    ChunksLocation resp;
+    brpc::Controller cntl;
+    stub_->getchunks(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed())
+        return {Status::IOError(cntl.ErrorText()), ChunksLocation()};
+    return {Status::OK(), resp};
 }

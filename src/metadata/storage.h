@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <vector>
 
+#define EC_K 4
+#define EC_M 2
+
 class MetadataStorage {
   public:
     MetadataStorage(const std::string &db_path) : db_path_(db_path) {}
@@ -40,7 +43,10 @@ class MetadataStorage {
     rocksdb::ColumnFamilyHandle *cf_inode_;
     rocksdb::ColumnFamilyHandle *cf_dentry_;
     rocksdb::ColumnFamilyHandle *cf_nodes_;
+    std::vector<std::string> storage_nodes_;
     std::string db_path_;
 
     uint64_t get_and_increment_counter();
+    std::pair<std::vector<std::string>, std::vector<std::string>>
+    get_random_nodes();
 };
