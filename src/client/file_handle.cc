@@ -21,6 +21,9 @@ Status FileHandle::init() {
             return s;
         }
         inode_ = attr.inode();
+    
+        open(O_RDWR | O_CREAT);
+        close();
     }
     return Status::OK();
 }
@@ -33,19 +36,19 @@ Status FileHandle::destroy() {
         return s;
     }
 
-    std::vector<std::string> chunk_nodes{
-        "node1",
-        "node2",
-        "node3",
-        "node4",
-    };
+    // std::vector<std::string> chunk_nodes{
+    //     "node1",
+    //     "node2",
+    //     "node3",
+    //     "node4",
+    // };
 
-    std::vector<std::string> parity_nodes{
-        "node5",
-        "node6",
-    };
+    // std::vector<std::string> parity_nodes{
+    //     "node5",
+    //     "node6",
+    // };
 
-    storage_->remove_file(chunk_nodes, parity_nodes, std::to_string(inode_));
+    // storage_->remove_file(chunk_nodes, parity_nodes, std::to_string(inode_));
 
     return Status::OK();
 }
@@ -54,70 +57,99 @@ Status FileHandle::open(int flags) {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
 
-    // --- build open_flags ---
-    // Always open read/write cache files, but only create if missing,
-    // and never truncate on open:
-    int oflags = O_RDWR;
-    if (flags & O_CREAT)
-        oflags |= O_CREAT; // only create when intended
-    // (Don’t ever do O_TRUNC here)
-    fd_ = ::open(path.c_str(), oflags, 0666);
-
-    // Retrieve the file from remote storage
-    std::vector<std::string> chunk_nodes{
-        "node1",
-        "node2",
-        "node3",
-        "node4",
-    };
-
-    std::vector<std::string> parity_nodes{
-        "node5",
-        "node6",
-    };
-
-    auto [st_attr, attr] = metadata_->getattr(inode_);
-    if (!st_attr.ok()) {
-        return st_attr;
-    }
-    if (attr.size() > 0) {
-        std::string file_id = std::to_string(inode_);
-        auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
-        if (!st.ok()) {
-            return st;
+    // if the file doesn't exist, create it
+    if (::access(path.c_str(), F_OK) == -1) {
+        // File does not exist, create it
+        fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to create file: " +
+                                   std::string(strerror(errno)));
         }
-        ssize_t written = ::write(fd_, data.payload().c_str(), data.len());
-        if (written < 0 || static_cast<size_t>(written) != data.len()) {
-            return Status::IOError(
-                "Failed to write remote data to local file: " +
-                std::string(strerror(errno)));
+    } else {
+        // File exists, open it
+        fd_ = ::open(path.c_str(), flags);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
         }
     }
 
     return Status::OK();
 }
+
+// Status FileHandle::open(int flags) {
+//     std::string inode_str = std::to_string(inode_);
+//     std::string path = join_paths(mount_path_, inode_str);
+
+//     fd_ = ::open(path.c_str(), flags | O_CREAT, 0666);
+
+//     // // Retrieve the file from remote storage
+//     // std::vector<std::string> chunk_nodes{
+//     //     "node1",
+//     //     "node2",
+//     //     "node3",
+//     //     "node4",
+//     // };
+
+//     // std::vector<std::string> parity_nodes{
+//     //     "node5",
+//     //     "node6",
+//     // };
+
+//     // auto [st_attr, attr] = metadata_->getattr(inode_);
+//     // if (!st_attr.ok()) {
+//     //     return st_attr;
+//     // }
+//     // if (attr.size() > 0) {
+//     //     std::string file_id = std::to_string(inode_);
+//     //     auto [st, data] = storage_->read(chunk_nodes, parity_nodes,
+//     file_id);
+//     //     if (!st.ok()) {
+//     //         return st;
+//     //     }
+//     //     ssize_t written = ::write(fd_, data.payload().c_str(),
+//     data.len());
+//     //     if (written < 0 || static_cast<size_t>(written) != data.len()) {
+//     //         return Status::IOError(
+//     //             "Failed to write remote data to local file: " +
+//     //             std::string(strerror(errno)));
+//     //     }
+//     // }
+
+//     return Status::OK();
+// }
 
 Status FileHandle::getattr(struct stat *buf) {
-    // Get the file/directory attributes from the metadata service.
-    auto [s, attr] = metadata_->getattr(inode_);
-    if (!s.ok()) {
-        return s;
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+
+    if (::stat(path.c_str(), buf) == -1) {
+        return Status::IOError("Failed to get attributes from local filesystem: " +
+                               std::string(strerror(errno)));
     }
-
-    buf->st_mode = attr.mode();
-    buf->st_size = attr.size();               // file size in bytes
-    buf->st_atime = attr.access_time();       // last access time
-    buf->st_mtime = attr.modification_time(); // last modification time
-    buf->st_ctime = attr.creation_time();     // creation or inode change time
-    buf->st_ino = attr.inode();               // inode number
-    buf->st_uid = attr.user_id();             // user ID of owner
-    buf->st_gid = attr.group_id();            // group ID of owner
-
     return Status::OK();
 }
+// Status FileHandle::getattr(struct stat *buf) {
+//     // Get the file/directory attributes from the metadata service.
+//     auto [s, attr] = metadata_->getattr(inode_);
+//     if (!s.ok()) {
+//         return s;
+//     }
+
+//     buf->st_mode = attr.mode();
+//     buf->st_size = attr.size();               // file size in bytes
+//     buf->st_atime = attr.access_time();       // last access time
+//     buf->st_mtime = attr.modification_time(); // last modification time
+//     buf->st_ctime = attr.creation_time();     // creation or inode change time
+//     buf->st_ino = attr.inode();               // inode number
+//     buf->st_uid = attr.user_id();             // user ID of owner
+//     buf->st_gid = attr.group_id();            // group ID of owner
+
+//     return Status::OK();
+// }
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
-    // Update the file access and modification times.
+    // Update the file access and modification times in metadata.
     Attributes attr = metadata_->getattr(inode_).second;
     attr.set_access_time(tv[0].tv_sec);
     attr.set_modification_time(tv[1].tv_sec);
@@ -127,26 +159,52 @@ Status FileHandle::utimens(const struct timespec tv[2]) {
         return s;
     }
 
+    // Also update the local file on disk.
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    if (::utimensat(AT_FDCWD, path.c_str(), tv, 0) == -1) {
+        return Status::IOError("Failed to update file timestamps: " +
+                               std::string(strerror(errno)));
+    }
+
     return Status::OK();
 }
 
 Status FileHandle::close() {
-    // First, sync the file data to remote storage.
-    Status s = sync();
-    if (!s.ok()) {
-        return s;
-    }
-
-    // Close the local file descriptor if it's open.
     if (fd_ != -1) {
+        // 1) Ensure all data is on disk
+        if (::fsync(fd_) < 0) {
+            return Status::IOError("fsync failed: " + std::string(strerror(errno)));
+        }
+
+        // 2) Get the true file size
+        struct stat st;
+        if (::fstat(fd_, &st) < 0) {
+            return Status::IOError("fstat failed: " + std::string(strerror(errno)));
+        }
+
+        // 3) Truncate any old tail beyond st.st_size
+        if (::ftruncate(fd_, st.st_size) < 0) {
+            return Status::IOError("ftruncate failed: " + std::string(strerror(errno)));
+        }
+
+        // 4) Rewind so that future reads start at byte 0
+        if (::lseek(fd_, 0, SEEK_SET) < 0) {
+            return Status::IOError("lseek failed: " + std::string(strerror(errno)));
+        }
+
+        // 5) Close the descriptor
         ::close(fd_);
         fd_ = -1;
     }
-
     return Status::OK();
 }
 
+
 Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
+    std::cout << "[INFO] read " << logic_path_ << " offset: " << offset
+              << " size: " << size << std::endl;
+
     if (fd_ == -1) {
         std::string inode_str = std::to_string(inode_);
         std::string path = join_paths(mount_path_, inode_str);
@@ -196,6 +254,29 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     if (written < 0 || static_cast<size_t>(written) != count) {
         return Status::IOError("Failed to write file: " +
                                std::string(strerror(errno)));
+    }
+
+    // Update metadata attributes based on local filesystem.
+    // Get the file size.
+    struct stat st;
+    if (::fstat(fd_, &st) == -1) {
+        return Status::IOError("Failed to stat file: " +
+                               std::string(strerror(errno)));
+    }
+    Attributes attr;
+    attr.set_mode(st.st_mode);
+    attr.set_path(filename(logic_path_));
+    attr.set_size(st.st_size);
+    attr.set_access_time(st.st_atime);
+    attr.set_modification_time(st.st_mtime);
+    attr.set_creation_time(st.st_ctime);
+    attr.set_inode(inode_);
+    attr.set_user_id(st.st_uid);
+    attr.set_group_id(st.st_gid);
+
+    Status meta_status = setattr(attr);
+    if (!meta_status.ok()) {
+        return meta_status;
     }
 
     return Status::OK();
