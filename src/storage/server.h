@@ -9,21 +9,21 @@ class StorageServiceImpl : public StorageService {
     StorageServiceImpl(const std::string &mount_path) : backend_(mount_path) {}
     virtual ~StorageServiceImpl() {}
 
-    void readfile(
+    void read_chunk(
         ::google::protobuf::RpcController *cntl,
         const ::ReadRequest *request, 
-        ::ReadResponse *response,
+        ::Data *response,
         ::google::protobuf::Closure *done
     );
 
-    void writefile(
+    void write_chunk(
         ::google::protobuf::RpcController *cntl,
         const ::WriteRequest *request, 
         ::WriteResponse *response,
         ::google::protobuf::Closure *done
     );
 
-    void deletefile(
+    void delete_chunk(
         ::google::protobuf::RpcController *cntl,
         const ::DeleteRequest *request, 
         ::google::protobuf::Empty *response,

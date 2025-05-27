@@ -32,6 +32,8 @@ class MetadataClient {
 
     Status setattr(const Attributes &attr);
 
+    std::pair<Status, ChunksLocation> get_chunks(const uint64_t &inode);
+
   private:
     brpc::Channel channel_;
     MetadataService_Stub *stub_;

@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <vector>
 
+#define EC_K 4
+#define EC_M 2
+
 class MetadataStorage {
   public:
     MetadataStorage(const std::string &db_path) : db_path_(db_path) {}

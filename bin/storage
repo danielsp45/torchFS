@@ -45,4 +45,4 @@ done
 echo "Starting storage server:"
 echo "  - port:      ${port}"
 echo "  - mount dir: ${mount_path}"
-./build/storage "${mount_path}" "${port}"
+./build/storage --mount_path="${mount_path}" --port="${port}"
