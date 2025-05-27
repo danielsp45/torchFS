@@ -14,12 +14,12 @@
 // Reimplemented OperationClosure with proper getters.
 class OperationClosure : public braft::Closure {
   public:
-    OperationClosure(KVStore *kv_store, OpType op_type,
+    OperationClosure(MetadataStateMachine *sm, OpType op_type,
                      const google::protobuf::Message *request,
                      google::protobuf::Message *response,
                      google::protobuf::Closure *done)
-        : kv_store_(kv_store), op_type_(op_type), request_(request),
-          response_(response), done_(done) {}
+        : sm_(sm), op_type_(op_type), request_(request), response_(response),
+          done_(done) {}
 
     void Run() override {
         std::unique_ptr<OperationClosure> self_guard(this);
@@ -34,14 +34,15 @@ class OperationClosure : public braft::Closure {
 
     google::protobuf::Message *get_response() { return response_; }
 
-    KVStore *kv_store_;
+    MetadataStateMachine *sm_;
     OpType op_type_;
     const google::protobuf::Message *request_;
     google::protobuf::Message *response_;
     google::protobuf::Closure *done_;
 };
 
-int KVStore::start(int port, const std::string &conf, const std::string &path) {
+int MetadataStateMachine::start(int port, const std::string &conf,
+                                const std::string &path) {
     // 1. Local storage initialization.
     storage_ = std::make_unique<MetadataStorage>(join_paths(path, "db"));
     if (auto st = storage_->init(); !st.ok()) {
@@ -80,41 +81,44 @@ int KVStore::start(int port, const std::string &conf, const std::string &path) {
     return 0;
 }
 
-void KVStore::shutdown() {
+void MetadataStateMachine::shutdown() {
     if (node_) {
         node_->shutdown(nullptr);
     }
 }
 
-void KVStore::join() {
+void MetadataStateMachine::join() {
     if (node_) {
         node_->join();
     }
 }
 
-void KVStore::on_snapshot_save(braft::SnapshotWriter * /*writer*/,
-                               braft::Closure *done) {
+void MetadataStateMachine::on_snapshot_save(braft::SnapshotWriter * /*writer*/,
+                                            braft::Closure *done) {
     braft::AsyncClosureGuard guard(done);
 }
 
-int KVStore::on_snapshot_load(braft::SnapshotReader * /*reader*/) { return 0; }
+int MetadataStateMachine::on_snapshot_load(braft::SnapshotReader * /*reader*/) {
+    return 0;
+}
 
-bool KVStore::is_leader() const {
+bool MetadataStateMachine::is_leader() const {
     return leader_term_.load(butil::memory_order_acquire) > 0;
 }
 
-void KVStore::on_leader_start(int64_t term) {
+void MetadataStateMachine::on_leader_start(int64_t term) {
     leader_term_.store(term, butil::memory_order_release);
     LOG(INFO) << "Node becomes leader";
 }
 
-void KVStore::on_leader_stop(const butil::Status &status) {
+void MetadataStateMachine::on_leader_stop(const butil::Status &status) {
     leader_term_.store(-1, butil::memory_order_release);
     LOG(INFO) << "Node stepped down : " << status;
 }
 
-Status KVStore::open(const InodeRequest *request, FileInfo *response,
-                     google::protobuf::Closure *done) {
+Status MetadataStateMachine::open(const InodeRequest *request,
+                                  FileInfo *response,
+                                  google::protobuf::Closure *done) {
     brpc::ClosureGuard done_guard(done);
     auto [s, info] = storage_->open(request->inode());
     if (!s.ok()) {
@@ -124,8 +128,9 @@ Status KVStore::open(const InodeRequest *request, FileInfo *response,
     return Status::OK();
 }
 
-Status KVStore::getattr(const InodeRequest *request, Attributes *response,
-                        google::protobuf::Closure *done) {
+Status MetadataStateMachine::getattr(const InodeRequest *request,
+                                     Attributes *response,
+                                     google::protobuf::Closure *done) {
     brpc::ClosureGuard done_guard(done);
     auto [s, attr] = storage_->getattr(request->inode());
     if (!s.ok()) {
@@ -135,9 +140,9 @@ Status KVStore::getattr(const InodeRequest *request, Attributes *response,
     return Status::OK();
 }
 
-Status KVStore::readdir(const ReadDirRequest *request,
-                        ReadDirResponse *response,
-                        google::protobuf::Closure *done) {
+Status MetadataStateMachine::readdir(const ReadDirRequest *request,
+                                     ReadDirResponse *response,
+                                     google::protobuf::Closure *done) {
     brpc::ClosureGuard done_guard(done);
     auto [s, entries] = storage_->readdir(request->inode());
     if (!s.ok()) {
@@ -151,50 +156,55 @@ Status KVStore::readdir(const ReadDirRequest *request,
     return Status::OK();
 }
 
-Status KVStore::setattr(const ::Attributes *request, ::Attributes *response,
-                        google::protobuf::Closure *done) {
+Status MetadataStateMachine::setattr(const ::Attributes *request,
+                                     ::Attributes *response,
+                                     google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_SETATTR);
 }
 
-Status KVStore::createfile(const CreateRequest *request, Attributes *response,
-                           google::protobuf::Closure *done) {
+Status MetadataStateMachine::createfile(const CreateRequest *request,
+                                        Attributes *response,
+                                        google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_CREATEFILE);
 }
 
-Status KVStore::createdir(const CreateRequest *request, Attributes *response,
-                          google::protobuf::Closure *done) {
+Status MetadataStateMachine::createdir(const CreateRequest *request,
+                                       Attributes *response,
+                                       google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_CREATEDIR);
 }
 
-Status KVStore::removefile(const RemoveRequest *request,
-                           google::protobuf::Empty *response,
-                           google::protobuf::Closure *done) {
+Status MetadataStateMachine::removefile(const RemoveRequest *request,
+                                        google::protobuf::Empty *response,
+                                        google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_REMOVEFILE);
 }
 
-Status KVStore::removedir(const RemoveRequest *request,
-                          google::protobuf::Empty *response,
-                          google::protobuf::Closure *done) {
+Status MetadataStateMachine::removedir(const RemoveRequest *request,
+                                       google::protobuf::Empty *response,
+                                       google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_REMOVEDIR);
 }
 
-Status KVStore::renamefile(const ::RenameRequest *request,
-                           google::protobuf::Empty *response,
-                           google::protobuf::Closure *done) {
+Status MetadataStateMachine::renamefile(const ::RenameRequest *request,
+                                        google::protobuf::Empty *response,
+                                        google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_RENAMEFILE);
 }
 
-Status KVStore::renamedir(const RenameRequest *request,
-                          google::protobuf::Empty *response,
-                          google::protobuf::Closure *done) {
+Status MetadataStateMachine::renamedir(const RenameRequest *request,
+                                       google::protobuf::Empty *response,
+                                       google::protobuf::Closure *done) {
     return apply_operation(request, response, done, OP_RENAMEDIR);
 }
 
 // Add this helper function to KVStore (e.g. in the private section of
 // state_machine.h)
-Status KVStore::apply_operation(const google::protobuf::Message *request,
-                                google::protobuf::Message *response,
-                                google::protobuf::Closure *done, OpType op) {
+Status
+MetadataStateMachine::apply_operation(const google::protobuf::Message *request,
+                                      google::protobuf::Message *response,
+                                      google::protobuf::Closure *done,
+                                      OpType op) {
     brpc::ClosureGuard done_guard(done);
     if (!is_leader()) {
         return Status::IOError("Not the leader");
@@ -218,7 +228,7 @@ Status KVStore::apply_operation(const google::protobuf::Message *request,
     return Status::OK();
 }
 
-void KVStore::on_apply(braft::Iterator &iter) {
+void MetadataStateMachine::on_apply(braft::Iterator &iter) {
     for (; iter.valid(); iter.next()) {
         // Ensure closure's Run() is called.
         braft::AsyncClosureGuard closure_guard(iter.done());

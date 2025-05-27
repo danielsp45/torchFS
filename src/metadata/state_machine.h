@@ -22,10 +22,11 @@ enum OpType : int32_t {
     OP_RENAMEDIR = 7,
 };
 
-class KVStore : public braft::StateMachine {
+class MetadataStateMachine : public braft::StateMachine {
   public:
-    KVStore() : storage_(nullptr), node_(nullptr), leader_term_(-1){};
-    ~KVStore() {
+    MetadataStateMachine()
+        : storage_(nullptr), node_(nullptr), leader_term_(-1){};
+    ~MetadataStateMachine() {
         // Cleanup resources if needed.
         // For example:
         storage_.reset();

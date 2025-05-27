@@ -40,7 +40,7 @@ class Directory {
     remove_file(const std::string name, bool delete_fh = true);
 
     std::pair<Status, std::unique_ptr<Directory>>
-    remove_dir(const std::string name);
+    remove_dir(const std::string name, bool delete_dir = true);
 
     Status move_file(Directory *old_dir, std::shared_ptr<FileHandle> fh,
                      const std::string &new_name);

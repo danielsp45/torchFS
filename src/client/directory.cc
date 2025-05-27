@@ -134,24 +134,19 @@ Directory::remove_file(const std::string name, bool delete_fh) {
 }
 
 std::pair<Status, std::unique_ptr<Directory>>
-Directory::remove_dir(const std::string name) {
+Directory::remove_dir(const std::string name, bool delete_dir) {
     auto it = subdirs_.find(name);
     if (it == subdirs_.end()) {
         return {Status::NotFound("Directory not found"), nullptr};
     }
-    // If you want to ensure the directory is empty, add a check here.
-    if (!it->second->files_.empty() || !it->second->subdirs_.empty()) {
-        return {Status::InvalidArgument("Directory not empty"), nullptr};
-    }
+
     auto dir_ptr = std::move(it->second);
-
-    // Remove the directory from the metadata service
-    auto s = metadata_->remove_dir(inode_, dir_ptr->get_inode(), name);
-    if (!s.ok()) {
-        return {s, nullptr};
-    }
-
     subdirs_.erase(it);
+
+    if (delete_dir) {
+        auto s = metadata_->remove_dir(inode_, dir_ptr->get_inode(), name);
+        return {s, std::move(dir_ptr)};
+    }
     return {Status::OK(), std::move(dir_ptr)};
 }
 
@@ -200,11 +195,6 @@ Status Directory::move_dir(Directory *parent_dir,
         return s;
     }
 
-    // Remove the directory from the old parent directory.
-    auto [s1, old_dir] = parent_dir->remove_dir(dir->get_name());
-    if (!s1.ok()) {
-        return Status::NotFound("Directory not found in parent directory");
-    }
     // Rename the directory
     dir->set_logic_path(join_paths(logic_path_, new_name));
     dir->set_parent_inode(inode_);

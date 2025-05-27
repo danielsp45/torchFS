@@ -43,10 +43,21 @@ class MetadataStorage {
     rocksdb::ColumnFamilyHandle *cf_inode_;
     rocksdb::ColumnFamilyHandle *cf_dentry_;
     rocksdb::ColumnFamilyHandle *cf_nodes_;
-    std::vector<std::string> storage_nodes_;
     std::string db_path_;
 
     uint64_t get_and_increment_counter();
-    std::pair<std::vector<std::string>, std::vector<std::string>>
-    get_random_nodes();
+
+    // Write/delete helpers for inode CF
+    Status put_inode(uint64_t inode, const std::string &value);
+    Status delete_inode(uint64_t inode);
+
+    // Write/delete helpers for dentry CF
+    Status put_dirent(uint64_t parent_inode, const std::string &name,
+                      const std::string &value);
+    Status delete_dirent(uint64_t parent_inode, const std::string &name);
+
+    // Read helpers
+    Status get_inode(uint64_t inode, std::string &value);
+    Status get_dirent(uint64_t parent_inode, const std::string &name,
+                      std::string &value);
 };
