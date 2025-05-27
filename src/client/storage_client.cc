@@ -51,14 +51,6 @@ StorageClient::~StorageClient() {
     }
 }
 
-void printBytesAsHex(const unsigned char *bytes, size_t length) {
-    for (size_t i = 0; i < length; ++i) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0')
-                  << (int)bytes[i] << " ";
-    }
-    std::cout << std::dec << std::endl; // Reset to decimal for future outputs
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -133,11 +125,6 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
         fragments.push_back(const_cast<char *>(frag.data()));
     }
 
-    for (size_t i = 0; i < fragments.size(); i++) {
-        printBytesAsHex(reinterpret_cast<const unsigned char *>(fragments[i]),
-                        frag_len);
-    }
-
     // Decode data
     char *decoded_data = nullptr;
     uint64_t decoded_len = 0;
@@ -183,14 +170,6 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
 
     if (res != 0) {
         return {Status::IOError("Encode failed: " + std::to_string(res)), 0};
-    }
-
-    for (size_t i = 0; i < EC_K + EC_M; i++) {
-        printBytesAsHex((i < EC_K) ? reinterpret_cast<const unsigned char *>(
-                                         data_fragments[i])
-                                   : reinterpret_cast<const unsigned char *>(
-                                         parity_fragments[i - EC_K]),
-                        fragment_len);
     }
 
     // Write to data nodes

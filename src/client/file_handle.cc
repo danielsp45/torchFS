@@ -53,12 +53,11 @@ Status FileHandle::destroy() {
 Status FileHandle::open(int flags) {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
-    // ensure we can write remote data into the file even if FUSE asked for
-    // O_RDONLY
-    int open_flags = (flags & ~O_ACCMODE) | O_CREAT;
-    if ((open_flags & O_ACCMODE) == O_RDONLY) {
-        open_flags = (open_flags & ~O_ACCMODE) | O_RDWR;
-    }
+
+    // --- build open_flags ---
+    // 1) copy in all of FUSE’s flags except the accmode bits
+    // 2) add back O_RDWR and O_CREAT unconditionally
+    int open_flags = (flags & ~O_ACCMODE) | O_RDWR | O_CREAT;
     fd_ = ::open(path.c_str(), open_flags, 0644);
     if (fd_ == -1) {
         return Status::IOError("Failed to open local file: " +
@@ -89,6 +88,10 @@ Status FileHandle::open(int flags) {
             return st;
         }
         ssize_t written = ::write(fd_, data.payload().c_str(), data.len());
+        std::cout << "FILE NAME: " << logic_path_ << std::endl;
+        std::cout << "Payload: " << data.payload() << std::endl;
+        std::cout << "Written bytes: " << written << std::endl;
+        std::cout << "Data length: " << data.len() << std::endl;
         if (written < 0 || static_cast<size_t>(written) != data.len()) {
             return Status::IOError(
                 "Failed to write remote data to local file: " +
@@ -106,8 +109,6 @@ Status FileHandle::getattr(struct stat *buf) {
         return s;
     }
 
-    // Transfer the data from Attributes to the stat structure.
-    // buf->st_mode = attr.mode(); // e.g., file type and permissions
     buf->st_mode = attr.mode();
     buf->st_size = attr.size();               // file size in bytes
     buf->st_atime = attr.access_time();       // last access time
@@ -135,87 +136,23 @@ Status FileHandle::utimens(const struct timespec tv[2]) {
 }
 
 Status FileHandle::close() {
-    std::cout << "CLOSING FILE" << std::endl;
-    if (fd_ == -1) {
-        return Status::IOError("File not open");
-    }
-
-    // Rewind the file to the beginning.
-    if (::lseek(fd_, 0, SEEK_SET) == -1) {
-        return Status::IOError("Failed to seek file: " +
-                               std::string(strerror(errno)));
-    }
-    std::cout << "LSEEK SUCCEEDED" << std::endl;
-
-    // Get the file size.
-    struct stat st;
-    if (::fstat(fd_, &st) == -1) {
-        return Status::IOError("Failed to stat file: " +
-                               std::string(strerror(errno)));
-    }
-    size_t filesize = st.st_size;
-
-    std::cout << "FILE READ BEFORE: " << filesize << std::endl;
-
-    // Allocate the string so &buffer[0] is valid
-    std::string buffer;
-    buffer.resize(filesize);
-
-    // Read the file content.
-    ssize_t n = ::read(fd_, &buffer[0], filesize);
-    std::cout << "FILE READ AFTER: " << n << std::endl;
-    if (n < 0 || static_cast<size_t>(n) != filesize) {
-        return Status::IOError("Failed to read whole file: " +
-                               std::string(strerror(errno)));
-    }
-    std::cout << "READ SUCCEEDED" << std::endl;
-
-    // Write the file data to the remote storage.
-    std::vector<std::string> chunk_nodes{
-        "node1",
-        "node2",
-        "node3",
-        "node4",
-    };
-
-    std::vector<std::string> parity_nodes{
-        "node5",
-        "node6",
-    };
-
-    std::string file_id = std::to_string(inode_);
-    Data data;
-    data.set_payload(buffer);
-    data.set_len(filesize);
-
-    auto [s, bytes_written] =
-        storage_->write(chunk_nodes, parity_nodes, file_id, data);
-    if (!s.ok()) {
-        return s;
-    }
-    std::cout << "WROTE FILE TO STORAGE, BYTES WRITTEN: " << bytes_written
-              << std::endl;
-
-    // Update metadata with the new file size.
-    Attributes attr = metadata_->getattr(inode_).second;
-    attr.set_size(filesize);
-    s = setattr(attr);
+    // First, sync the file data to remote storage.
+    Status s = sync();
     if (!s.ok()) {
         return s;
     }
 
-    // Close the local file.
-    if (::close(fd_) == -1) {
-        return Status::IOError("Failed to close file: " +
-                               std::string(strerror(errno)));
+    // Close the local file descriptor if it's open.
+    if (fd_ != -1) {
+        ::close(fd_);
+        fd_ = -1;
     }
-    fd_ = -1;
 
     // Delete the local file.
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     if (::unlink(path.c_str()) == -1) {
-        return Status::IOError("Failed to delete local file: " +
+        return Status::IOError("Failed to remove local file: " +
                                std::string(strerror(errno)));
     }
 
@@ -293,12 +230,61 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
 
 Status FileHandle::sync() {
     if (fd_ == -1) {
-        return Status::IOError("File not open");
+        std::string inode_str = std::to_string(inode_);
+        std::string path = join_paths(mount_path_, inode_str);
+        fd_ = ::open(path.c_str(), O_RDWR);
+        if (fd_ == -1) {
+            return Status::IOError("Failed to open file: " +
+                                   std::string(strerror(errno)));
+        }
     }
-    if (::fsync(fd_) == -1) {
-        return Status::IOError("Failed to flush file: " +
+
+    // Rewind the file to the beginning.
+    if (::lseek(fd_, 0, SEEK_SET) == -1) {
+        return Status::IOError("Failed to seek file: " +
                                std::string(strerror(errno)));
     }
+
+    // Get the file size.
+    struct stat st;
+    if (::fstat(fd_, &st) == -1) {
+        return Status::IOError("Failed to stat file: " +
+                               std::string(strerror(errno)));
+    }
+    size_t filesize = st.st_size;
+
+    // Allocate a buffer and read the file content.
+    std::string buffer;
+    buffer.resize(filesize);
+    ssize_t n = ::read(fd_, &buffer[0], filesize);
+    if (n < 0 || static_cast<size_t>(n) != filesize) {
+        return Status::IOError("Failed to read whole file: " +
+                               std::string(strerror(errno)));
+    }
+
+    // Write the file data to the remote storage.
+    std::vector<std::string> chunk_nodes{
+        "node1",
+        "node2",
+        "node3",
+        "node4",
+    };
+    std::vector<std::string> parity_nodes{
+        "node5",
+        "node6",
+    };
+
+    std::string file_id = std::to_string(inode_);
+    Data data;
+    data.set_payload(buffer);
+    data.set_len(filesize);
+
+    auto [s, bytes_written] =
+        storage_->write(chunk_nodes, parity_nodes, file_id, data);
+    if (!s.ok()) {
+        return s;
+    }
+
     return Status::OK();
 }
 
