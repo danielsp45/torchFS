@@ -60,19 +60,20 @@ Status FileHandle::open(int flags) {
     // if the file doesn't exist, create it
     if (::access(path.c_str(), F_OK) == -1) {
         // File does not exist, create it
-        fd_ = ::open(path.c_str(), flags | O_CREAT, 0644);
-        if (fd_ == -1) {
+        int fd = ::open(path.c_str(), flags | O_CREAT, 0644);
+        if (fd == -1) {
             return Status::IOError("Failed to create file: " +
                                    std::string(strerror(errno)));
         }
-    } else {
+        ::close(fd);
+    } /*else {
         // File exists, open it
         fd_ = ::open(path.c_str(), flags);
         if (fd_ == -1) {
             return Status::IOError("Failed to open file: " +
                                    std::string(strerror(errno)));
         }
-    }
+    }*/
 
     return Status::OK();
 }
@@ -171,7 +172,7 @@ Status FileHandle::utimens(const struct timespec tv[2]) {
 }
 
 Status FileHandle::close() {
-    if (fd_ != -1) {
+    /*if (fd_ != -1) {
         // 1) Ensure all data is on disk
         if (::fsync(fd_) < 0) {
             return Status::IOError("fsync failed: " + std::string(strerror(errno)));
@@ -196,7 +197,7 @@ Status FileHandle::close() {
         // 5) Close the descriptor
         ::close(fd_);
         fd_ = -1;
-    }
+    }*/
     return Status::OK();
 }
 
@@ -205,52 +206,42 @@ Status FileHandle::read(Slice &dst, size_t size, off_t offset) {
     std::cout << "[INFO] read " << logic_path_ << " offset: " << offset
               << " size: " << size << std::endl;
 
-    if (fd_ == -1) {
-        std::string inode_str = std::to_string(inode_);
-        std::string path = join_paths(mount_path_, inode_str);
-        fd_ = ::open(path.c_str(), O_RDONLY);
-        if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
-        }
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        return Status::IOError("Failed to open file: " +
+                                std::string(strerror(errno)));
     }
 
-    // Seek to the specified offset
-    if (::lseek(fd_, offset, SEEK_SET) == -1) {
-        return Status::IOError("Failed to seek file: " +
-                               std::string(strerror(errno)));
-    }
 
     // Read up to 'size' bytes from the local file
-    ssize_t bytes_read = ::read(fd_, dst.data(), size);
+    ssize_t bytes_read = ::pread(fd, dst.data(), size,offset);
     if (bytes_read < 0) {
         return Status::IOError("Failed to read file: " +
                                std::string(strerror(errno)));
     }
 
+    // Close the file descriptor.
+    ::close(fd);
+
     return Status::OK();
 }
 
 Status FileHandle::write(Slice &src, size_t count, off_t offset) {
-    if (fd_ == -1) {
-        std::string inode_str = std::to_string(inode_);
-        std::string path = join_paths(mount_path_, inode_str);
-        // must be readable later in close()
-        fd_ = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
-        if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
-        }
+
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    // must be readable later in close()
+    int fd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+        return Status::IOError("Failed to open file: " +
+                                std::string(strerror(errno)));
     }
 
-    // Seek to the specified offset
-    if (::lseek(fd_, offset, SEEK_SET) == -1) {
-        return Status::IOError("Failed to seek file: " +
-                               std::string(strerror(errno)));
-    }
 
     // Write the data to the local file
-    ssize_t written = ::write(fd_, src.data(), count);
+    ssize_t written = ::pwrite(fd, src.data(), count,offset);
     if (written < 0 || static_cast<size_t>(written) != count) {
         return Status::IOError("Failed to write file: " +
                                std::string(strerror(errno)));
@@ -258,6 +249,7 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
 
     // Update metadata attributes based on local filesystem.
     // Get the file size.
+    /*
     struct stat st;
     if (::fstat(fd_, &st) == -1) {
         return Status::IOError("Failed to stat file: " +
@@ -278,30 +270,33 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     if (!meta_status.ok()) {
         return meta_status;
     }
+    */
+
+    ::close(fd);
 
     return Status::OK();
 }
 
 Status FileHandle::sync() {
-    if (fd_ == -1) {
-        std::string inode_str = std::to_string(inode_);
-        std::string path = join_paths(mount_path_, inode_str);
-        fd_ = ::open(path.c_str(), O_RDWR);
-        if (fd_ == -1) {
-            return Status::IOError("Failed to open file: " +
-                                   std::string(strerror(errno)));
-        }
+
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    int fd = ::open(path.c_str(), O_RDWR);
+
+        return Status::IOError("Failed to open file: " +
+                                std::string(strerror(errno)));
     }
 
+
     // Rewind the file to the beginning.
-    if (::lseek(fd_, 0, SEEK_SET) == -1) {
+    if (::lseek(fd, 0, SEEK_SET) == -1) {
         return Status::IOError("Failed to seek file: " +
                                std::string(strerror(errno)));
     }
 
     // Get the file size.
     struct stat st;
-    if (::fstat(fd_, &st) == -1) {
+    if (::fstat(fd, &st) == -1) {
         return Status::IOError("Failed to stat file: " +
                                std::string(strerror(errno)));
     }
@@ -355,6 +350,9 @@ Status FileHandle::sync() {
     if (!meta_status.ok()) {
         return meta_status;
     }
+
+    // Close the file descriptor.
+    ::close(fd);
 
     return Status::OK();
 }
