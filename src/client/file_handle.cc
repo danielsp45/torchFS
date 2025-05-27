@@ -55,14 +55,13 @@ Status FileHandle::open(int flags) {
     std::string path = join_paths(mount_path_, inode_str);
 
     // --- build open_flags ---
-    // 1) copy in all of FUSE’s flags except the accmode bits
-    // 2) add back O_RDWR and O_CREAT unconditionally
-    int open_flags = (flags & ~O_ACCMODE) | O_RDWR | O_CREAT;
-    fd_ = ::open(path.c_str(), open_flags, 0644);
-    if (fd_ == -1) {
-        return Status::IOError("Failed to open local file: " +
-                               std::string(strerror(errno)));
-    }
+    // Always open read/write cache files, but only create if missing,
+    // and never truncate on open:
+    int oflags = O_RDWR;
+    if (flags & O_CREAT)
+        oflags |= O_CREAT; // only create when intended
+    // (Don’t ever do O_TRUNC here)
+    fd_ = ::open(path.c_str(), oflags, 0666);
 
     // Retrieve the file from remote storage
     std::vector<std::string> chunk_nodes{
@@ -88,10 +87,6 @@ Status FileHandle::open(int flags) {
             return st;
         }
         ssize_t written = ::write(fd_, data.payload().c_str(), data.len());
-        std::cout << "FILE NAME: " << logic_path_ << std::endl;
-        std::cout << "Payload: " << data.payload() << std::endl;
-        std::cout << "Written bytes: " << written << std::endl;
-        std::cout << "Data length: " << data.len() << std::endl;
         if (written < 0 || static_cast<size_t>(written) != data.len()) {
             return Status::IOError(
                 "Failed to write remote data to local file: " +
@@ -148,14 +143,6 @@ Status FileHandle::close() {
         fd_ = -1;
     }
 
-    // Delete the local file.
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
-    if (::unlink(path.c_str()) == -1) {
-        return Status::IOError("Failed to remove local file: " +
-                               std::string(strerror(errno)));
-    }
-
     return Status::OK();
 }
 
@@ -209,20 +196,6 @@ Status FileHandle::write(Slice &src, size_t count, off_t offset) {
     if (written < 0 || static_cast<size_t>(written) != count) {
         return Status::IOError("Failed to write file: " +
                                std::string(strerror(errno)));
-    }
-
-    // Update metadata: refresh file size based on current local file state.
-    struct stat st;
-    if (::fstat(fd_, &st) == -1) {
-        return Status::IOError("Failed to stat file: " +
-                               std::string(strerror(errno)));
-    }
-    Attributes attr = metadata_->getattr(inode_).second;
-    attr.set_size(static_cast<size_t>(st.st_size));
-
-    Status s = setattr(attr);
-    if (!s.ok()) {
-        return s;
     }
 
     return Status::OK();
@@ -283,6 +256,23 @@ Status FileHandle::sync() {
         storage_->write(chunk_nodes, parity_nodes, file_id, data);
     if (!s.ok()) {
         return s;
+    }
+
+    // Update metadata attributes based on local filesystem.
+    Attributes attr;
+    attr.set_mode(st.st_mode);
+    attr.set_path(filename(logic_path_));
+    attr.set_size(st.st_size);
+    attr.set_access_time(st.st_atime);
+    attr.set_modification_time(st.st_mtime);
+    attr.set_creation_time(st.st_ctime);
+    attr.set_inode(inode_);
+    attr.set_user_id(st.st_uid);
+    attr.set_group_id(st.st_gid);
+
+    Status meta_status = setattr(attr);
+    if (!meta_status.ok()) {
+        return meta_status;
     }
 
     return Status::OK();
