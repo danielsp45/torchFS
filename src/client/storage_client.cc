@@ -174,7 +174,6 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
 
     // Write to data nodes
     for (int i = 0; i < EC_K; i++) {
-        std::cout << "Writing to data node: " << data_nodes[i] << std::endl;
         std::string node = data_nodes[i];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};

@@ -126,7 +126,6 @@ target_include_directories(metadata PRIVATE
 )
 target_link_libraries(metadata PRIVATE
   ${EXTRA_GFLAGS_LIBS}
-  ${EXTRA_ERASURE_LIBS}
   unofficial::brpc::brpc-static
   unofficial::braft::braft-static
   ${EXTRA_PROTO_LIBS}
@@ -134,7 +133,7 @@ target_link_libraries(metadata PRIVATE
 )
 
 # ──────────────────────────────────────
-# storage (Erasure Coding) binary
+# storage binary
 # ──────────────────────────────────────
 add_executable(storage
   ${STORAGE_SOURCES}
@@ -147,7 +146,6 @@ target_include_directories(storage PRIVATE
 )
 target_link_libraries(storage PRIVATE
   ${EXTRA_GFLAGS_LIBS}
-  ${EXTRA_ERASURE_LIBS}
   unofficial::brpc::brpc-static
   ${EXTRA_PROTO_LIBS}
 )
