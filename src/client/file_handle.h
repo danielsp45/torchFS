@@ -60,6 +60,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
 
     Status setattr(Attributes &attr);
     Status flush();
+    Status cache();
 };
 
 struct FilePointer {
@@ -67,20 +68,24 @@ struct FilePointer {
     int fd;          // already-open FD
 
     // Constructor: opens the local file and hydrates it
-    FilePointer(std::shared_ptr<FileHandle> fh, std::string &path, int open_flags)
-      : fh(std::move(fh))
-    {
-      fd = ::open(path.c_str(), open_flags, 0666);
-      std::cout << "OPENED FILE: " << path << " with flags: " << open_flags << std::endl;
-      if (fd < 0) throw std::system_error(errno, std::generic_category(),
-                                          "open failed");
-    }
+    FilePointer(std::shared_ptr<FileHandle> fh)
+      : fh(std::move(fh)), fd(-1)
+    {}
 
-    ~FilePointer() {
-      std::cout << "CLOSED FILE" << std::endl;
+    ~FilePointer() = default;
+
+    int open(std::string &path, int open_flags) {
+      fd = ::open(path.c_str(), open_flags, 0644);
+      return fd;
+    }
+    
+    int close() {
       if (fd >= 0) {
-        ::close(fd);
+        int ret = ::close(fd);
+        fd = -1; // Reset fd after closing
+        return ret;
       }
+      return 0; // Already closed
     }
 
     ssize_t read(Slice &dst, size_t size, off_t offset) {
@@ -117,5 +122,62 @@ struct FilePointer {
       return ::fstat(fd, buf);
     }
 };
+
+
+// struct FilePointer {
+//     std::shared_ptr<FileHandle> fh;    
+//     int fd;          // already-open FD
+
+//     // Constructor: opens the local file and hydrates it
+//     FilePointer(std::shared_ptr<FileHandle> fh, std::string &path, int open_flags)
+//       : fh(std::move(fh))
+//     {
+//       fd = ::open(path.c_str(), open_flags, 0666);
+//       std::cout << "OPENED FILE: " << path << " with flags: " << open_flags << std::endl;
+//       if (fd < 0) throw std::system_error(errno, std::generic_category(),
+//                                           "open failed");
+//     }
+
+//     ~FilePointer() {
+//       std::cout << "CLOSED FILE" << std::endl;
+//       if (fd >= 0) {
+//         ::close(fd);
+//       }
+//     }
+
+//     ssize_t read(Slice &dst, size_t size, off_t offset) {
+//       if (fd < 0) {
+//         return -1; // Invalid file descriptor
+//       }
+
+//       ssize_t bytes_read = ::pread(fd, dst.data(), size, offset);
+//       if (bytes_read < 0) {
+//         return -1; // Read error
+//       }
+
+//       return bytes_read;
+//     }
+
+//     ssize_t write(Slice &src, size_t size, off_t offset) {
+//       if (fd < 0) {
+//         return -1; // Invalid file descriptor
+//       }
+
+//       ssize_t bytes_written = ::pwrite(fd, src.data(), size, offset);
+//       if (bytes_written < 0) {
+//         return -1; // Write error
+//       }
+
+//       return bytes_written;
+//     }
+
+//     int fstat(struct stat *buf) {
+//       if (fd < 0) {
+//         return -1; // Invalid file descriptor
+//       }
+
+//       return ::fstat(fd, buf);
+//     }
+// };
 
 #endif // FILE_HANDLE_H

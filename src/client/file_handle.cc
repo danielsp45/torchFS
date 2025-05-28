@@ -39,7 +39,20 @@ Status FileHandle::destroy() {
         return s;
     }
 
-    // TODO: remove the file from the metadata and remote storage
+    std::vector<std::string> chunk_nodes{
+        "node1",
+        "node2",
+        "node3",
+        "node4",
+    };
+
+    std::vector<std::string> parity_nodes{
+        "node5",
+        "node6",
+    };
+
+    storage_->remove_file(chunk_nodes, parity_nodes, std::to_string(inode_));
+
     return Status::OK();
 }
 
@@ -49,9 +62,8 @@ Status FileHandle::open(FilePointer **out_fp, int flags) {
 
     // 1) wrap the fd in a unique_ptr<FilePointer>
     auto self = shared_from_this();                
-    auto fp = std::make_unique<FilePointer>( self,
-                                             path,
-                                             flags);
+    auto fp = std::make_unique<FilePointer>(self);
+    fp->open(path, flags);
     *out_fp = fp.get();
     file_pointers_.push_back(std::move(fp));
 
@@ -68,12 +80,8 @@ Status FileHandle::close(FilePointer *fp) {
         return Status::NotFound("FilePointer not found in the vector");
     }
 
-    std::cout << "[LOG] Closing file pointer: " << fp->fd << std::endl;
-
-    // remove the pointer from the vector
+    fp->close();
     file_pointers_.erase(it);
-
-    std::cout << "[LOG] Closed file pointer: " << fp->fd << std::endl;
 
     return Status::OK();
 }
@@ -148,7 +156,6 @@ Status FileHandle::sync() {
     return Status::OK();
 }
 
-
 Status FileHandle::flush() {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
@@ -156,12 +163,6 @@ Status FileHandle::flush() {
     if (fd == -1) {
         return Status::IOError("Failed to open file: " +
                                 std::string(strerror(errno)));
-    }
-
-    // Rewind the file to the beginning.
-    if (::lseek(fd, 0, SEEK_SET) == -1) {
-        return Status::IOError("Failed to seek file: " +
-                               std::string(strerror(errno)));
     }
 
     // Get the file size.
@@ -179,6 +180,29 @@ Status FileHandle::flush() {
     if (n < 0 || static_cast<size_t>(n) != filesize) {
         return Status::IOError("Failed to read whole file: " +
                                std::string(strerror(errno)));
+    }
+
+    // Write the file data to the remote storage.
+    std::vector<std::string> chunk_nodes{
+        "node1",
+        "node2",
+        "node3",
+        "node4",
+    };
+    std::vector<std::string> parity_nodes{
+        "node5",
+        "node6",
+    };
+
+    std::string file_id = std::to_string(inode_);
+    Data data;
+    data.set_payload(buffer);
+    data.set_len(filesize);
+
+    auto [s, bytes_written] =
+        storage_->write(chunk_nodes, parity_nodes, file_id, data);
+    if (!s.ok()) {
+        return s;
     }
 
     // Update metadata attributes based on local filesystem.
@@ -201,6 +225,41 @@ Status FileHandle::flush() {
     return Status::OK();
 }
 
+Status FileHandle::cache() {
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    int fd = ::open(path.c_str(), O_RDWR);
+    if (fd == -1) {
+        return Status::IOError("Failed to open file: " +
+                                std::string(strerror(errno)));
+    }
+
+    // Retrieve the file from remote storage
+    std::vector<std::string> chunk_nodes{
+        "node1",
+        "node2",
+        "node3",
+        "node4",
+    };
+
+    std::vector<std::string> parity_nodes{
+        "node5",
+        "node6",
+    };
+
+
+    std::string file_id = std::to_string(inode_);
+    auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
+
+    ssize_t written = ::write(fd, data.payload().c_str(), data.len());
+    if (written < 0 || static_cast<size_t>(written) != data.len()) {
+        return Status::IOError(
+            "Failed to write remote data to local file: " +
+            std::string(strerror(errno)));
+    }
+
+    return Status::OK();
+}
 
 Status FileHandle::setattr(Attributes &attr) {
     // Update the file attributes in the metadata service.

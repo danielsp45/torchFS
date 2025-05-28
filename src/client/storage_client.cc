@@ -10,9 +10,9 @@
 
 StorageClient::StorageClient() {
     const std::vector<std::pair<std::string, std::string>> servers = {
-        {"node1", "127.0.0.1:9000"}, {"node2", "127.0.0.1:9001"},
-        {"node3", "127.0.0.1:9002"}, {"node4", "127.0.0.1:9003"},
-        {"node5", "127.0.0.1:9004"}, {"node6", "127.0.0.1:9005"}};
+        {"node1", "127.0.0.1:9001"}, {"node2", "127.0.0.1:9002"},
+        {"node3", "127.0.0.1:9003"}, {"node4", "127.0.0.1:9004"},
+        {"node5", "127.0.0.1:9005"}, {"node6", "127.0.0.1:9006"}};
 
     for (const auto &entry : servers) {
         const std::string &server_name = entry.first;
