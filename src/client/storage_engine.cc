@@ -18,13 +18,14 @@ Status StorageEngine::init() {
     return Status::OK();
 }
 
-Status StorageEngine::open(const std::string &path, int flags) {
+Status StorageEngine::open(const std::string &path, int flags, 
+                           FilePointer **out_fp) {
 
     auto [s, fh] = find_file(path);
     if (!fh) {
         return Status::NotFound("File not found");
     }
-    s = fh->open(flags);
+    s = fh->open(out_fp, flags);
     if (!s.ok()) {
         return s;
     }
@@ -51,21 +52,33 @@ Status StorageEngine::create(const std::string &path) {
     return s1;
 }
 
-Status StorageEngine::close(std::string &path) {
-    auto [s, fh] = find_file(path);
-    if (!s.ok()) {
-        return s;
+Status StorageEngine::close(FilePointer *fp) {
+    auto fh = fp->fh;
+    Status s1 = fh->close(fp);
+    if (!s1.ok()) {
+        return s1;
     }
 
-    Status s1 = fh->close();
-    if (!s1.ok()) {
-        return s;
+    if (fh->is_unlinked()) {
+        // If the file is unlinked, we can remove it from the parent directory
+        std::string path = fh->get_logic_path();
+        auto [dir_name, file_name] = split_path_from_target(path);
+        auto [dir_status, directory] = find_dir(dir_name);
+        if (!dir_status.ok()) {
+            return dir_status;
+        }
+
+        // Remove the file from the directory
+        auto [s2, fh] = directory->remove_file(file_name);
+        if (!s2.ok()) {
+            return s2;
+        }
     }
 
     return Status::OK();
 }
 
-Status StorageEngine::remove(const std::string path) {
+Status StorageEngine::unlink(const std::string path) {
     auto [dir_name, file_name] = split_path_from_target(path);
 
     auto [dir_status, directory] = find_dir(dir_name);
@@ -73,18 +86,24 @@ Status StorageEngine::remove(const std::string path) {
         return dir_status;
     }
 
-    auto [remove_status, file_handle] = directory->remove_file(file_name);
-    return remove_status;
-}
+    auto fh = directory->get_file(file_name);
+    fh->unlink();
 
-Status StorageEngine::read(std::string &path, Slice result, size_t size,
-                           off_t offset) {
-    auto [s, fh] = find_file(path);
-    if (!s.ok()) {
-        return s;
+    if (fh->is_unlinked()) {
+        // If the file is unlinked, we can remove it from the parent directory
+        auto [s, _fh] = directory->remove_file(file_name);
+        if (!s.ok()) {
+            return s;
+        }
     }
 
-    s = fh->read(result, size, offset);
+    return Status::OK();
+}
+
+Status StorageEngine::read(FilePointer *fp, Slice result, size_t size,
+                           off_t offset) {
+    std::shared_ptr<FileHandle> fh = fp->fh;
+    Status s = fh->read(fp, result, size, offset);
     if (!s.ok()) {
         return s;
     }
@@ -92,14 +111,10 @@ Status StorageEngine::read(std::string &path, Slice result, size_t size,
     return Status::OK();
 }
 
-Status StorageEngine::write(std::string &path, Slice data, size_t size,
+Status StorageEngine::write(FilePointer *fp, Slice data, size_t size,
                             off_t offset) {
-    auto [s, fh] = find_file(path);
-    if (!s.ok()) {
-        return s;
-    }
-
-    s = fh->write(data, size, offset);
+    std::shared_ptr<FileHandle> fh = fp->fh;
+    Status s = fh->write(fp, data, size, offset);
     if (!s.ok()) {
         return s;
     }
