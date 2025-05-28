@@ -91,8 +91,7 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
     }
 
     // Read from parity nodes if needed
-    for (int i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K;
-         i++) {
+    for (size_t i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K; i++) {
         const std::string &node = parity_nodes[i];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), Data()};

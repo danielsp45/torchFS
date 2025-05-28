@@ -5,6 +5,8 @@
 #include "file_handle.h"
 #include "fuse.h"
 #include "status.h"
+#include "cache.h"
+#include "cache_policies/lfu_policy.h"
 
 #include <memory>
 
@@ -13,8 +15,10 @@ class StorageEngine {
     StorageEngine(const std::string &mount_path)
         : mount_path_(mount_path),
           root_(std::make_unique<Directory>(
-              0, 1, "/", mount_path, std::make_shared<MetadataClient>(),
-              std::make_shared<StorageClient>())) {}
+              0, 1, "/", mount_path,
+              std::make_shared<MetadataClient>(),
+              std::make_shared<StorageClient>())),
+          cache_(std::make_unique<LFUEvictionPolicy>()) {}
 
     ~StorageEngine() {}
 
@@ -40,6 +44,7 @@ class StorageEngine {
   private:
     std::string mount_path_;          // Directory for local storage
     std::unique_ptr<Directory> root_; // Root directory
+    Cache cache_;
 
     std::string register_fh(std::shared_ptr<FileHandle> fh);
     std::shared_ptr<FileHandle> lookup_fh(std::string &logic_path);
