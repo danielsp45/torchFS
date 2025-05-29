@@ -67,9 +67,9 @@ Status FileHandle::open(FilePointer **out_fp, int flags) {
     *out_fp = fp.get();
     file_pointers_.push_back(std::move(fp));
 
-    // if (!cached_) {
-    //     cache();
-    // }
+    if (!cached_) {
+        cache();
+    }
     return Status::OK();
 }
 
@@ -86,10 +86,10 @@ Status FileHandle::close(FilePointer *fp) {
     fp->close();
     file_pointers_.erase(it);
 
-    // if (cached_) {
-    //     flush();
-    //     cached_ = false; // Mark as uncached
-    // }
+    if (cached_) {
+        flush();
+        uncache();
+    }
 
     return Status::OK();
 }
@@ -297,6 +297,8 @@ Status FileHandle::cache() {
             "Failed to write remote data to local file: " +
             std::string(strerror(errno)));
     }
+
+    cached_ = true; // Mark as cached
 
     return Status::OK();
 }
