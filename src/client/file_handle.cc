@@ -67,6 +67,9 @@ Status FileHandle::open(FilePointer **out_fp, int flags) {
     *out_fp = fp.get();
     file_pointers_.push_back(std::move(fp));
 
+    // if (!cached_) {
+    //     cache();
+    // }
     return Status::OK();
 }
 
@@ -82,6 +85,11 @@ Status FileHandle::close(FilePointer *fp) {
 
     fp->close();
     file_pointers_.erase(it);
+
+    // if (cached_) {
+    //     flush();
+    //     cached_ = false; // Mark as uncached
+    // }
 
     return Status::OK();
 }
@@ -118,27 +126,59 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
     if (::fstat(fp->fd, &st) == -1) {
         return Status::IOError("fstat failed: " + std::string(strerror(errno)));
     }
+
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
+    attr.set_size(st.st_size);
+    metadata_->setattr(attr);
     
     return Status::OK();
 }
 
 Status FileHandle::getattr(struct stat *buf) {
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
+    if (false) {
+        std::string inode_str = std::to_string(inode_);
+        std::string path = join_paths(mount_path_, inode_str);
 
-    if (::lstat(path.c_str(), buf) == -1) {
-        return Status::IOError("lstat failed: " + std::string(strerror(errno)));
+        if (::lstat(path.c_str(), buf) == -1) {
+            return Status::IOError("lstat failed: " + std::string(strerror(errno)));
+        }
+    } else {
+        // Get the file attributes from the metadata service
+        auto [s, attr] = metadata_->getattr(inode_);
+        if (!s.ok()) {
+            return s;
+        }
+
+        buf->st_mode = attr.mode();
+        buf->st_size = attr.size();
+        buf->st_atime = attr.access_time();
+        buf->st_mtime = attr.modification_time();
+        buf->st_ctime = attr.creation_time();
+        buf->st_uid = attr.user_id();
+        buf->st_gid = attr.group_id();
     }
 
     return Status::OK();
 }
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
+    if (false) {
+        std::string inode_str = std::to_string(inode_);
+        std::string path = join_paths(mount_path_, inode_str);
 
-    if (::utimensat(AT_FDCWD, path.c_str(), tv, 0) == -1) {
-        return Status::IOError("utimensat failed: " + std::string(strerror(errno)));
+        if (::utimensat(AT_FDCWD, path.c_str(), tv, 0) == -1) {
+            return Status::IOError("utimensat failed: " + std::string(strerror(errno)));
+        }
+    } else {
+        // Update the file attributes in the metadata service
+        auto [s, attr] = metadata_->getattr(inode_);
+        attr.set_access_time(tv[0].tv_sec);
+        attr.set_modification_time(tv[1].tv_sec);
+
+        s = setattr(attr);
     }
 
     return Status::OK();
@@ -258,6 +298,18 @@ Status FileHandle::cache() {
             std::string(strerror(errno)));
     }
 
+    return Status::OK();
+}
+
+Status FileHandle::uncache() {
+    std::string inode_str = std::to_string(inode_);
+    std::string path = join_paths(mount_path_, inode_str);
+    if (::unlink(path.c_str()) == -1) {
+        return Status::IOError("Failed to unlink file: " +
+                               std::string(strerror(errno)));
+    }
+
+    cached_ = false; // Mark as uncached
     return Status::OK();
 }
 

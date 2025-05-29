@@ -23,7 +23,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
                std::shared_ptr<StorageClient> storage)
         : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
           mount_path_(mount_path), metadata_(metadata), storage_(storage),
-          file_pointers_(), unlink_(false) {}
+          file_pointers_(), unlink_(false), cached_(false) {}
 
     ~FileHandle() {}
 
@@ -57,10 +57,12 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     std::shared_ptr<StorageClient> storage_;   // Storage client
     std::vector<std::unique_ptr<FilePointer>> file_pointers_; // File pointers
     bool unlink_;
+    bool cached_;
 
     Status setattr(Attributes &attr);
     Status flush();
     Status cache();
+    Status uncache();
 };
 
 struct FilePointer {
