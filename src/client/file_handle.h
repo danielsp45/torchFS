@@ -58,6 +58,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     std::vector<std::unique_ptr<FilePointer>> file_pointers_; // File pointers
     bool unlink_;
     bool cached_;
+    std::mutex mutex_;
 
     Status setattr(Attributes &attr);
     Status flush();

@@ -192,21 +192,17 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         brpc::Controller cntl;
 
         // MERDA AQUI
-        // nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
-        // if (cntl.Failed()) {
-        //     std::cerr << "Failed to write to data node " << node << ": "
-        //               << cntl.ErrorText() << std::endl;
-        // } else {
-        //     std::cout << "Wrote data to node " << node << std::endl;
-        // }
+        nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        if (cntl.Failed()) {
+            std::cerr << "Failed to write to data node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
+        }
     }
 
-    std::cout << "Data written to data nodes successfully." << std::endl;
 
     // Write to parity nodes
     for (int i = 0; i < EC_M; i++) {
         std::string node = parity_nodes[i];
-        std::cout << "Writing parity to node: " << node << std::endl;
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};
         }
@@ -222,13 +218,11 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         brpc::Controller cntl;
 
         // MERDA AQUI
-        // nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
-        // if (cntl.Failed()) {
-        //     std::cerr << "Failed to write to parity node " << node << ": "
-        //               << cntl.ErrorText() << std::endl;
-        // } else {
-        //     std::cout << "Wrote parity to node " << node << std::endl;
-        // }
+        nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        if (cntl.Failed()) {
+            std::cerr << "Failed to write to parity node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
+        }    
     }
 
     std::cout << "Parity written to parity nodes successfully." << std::endl;
