@@ -138,30 +138,45 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
 }
 
 Status FileHandle::getattr(struct stat *buf) {
-    // Get the file attributes from the metadata service
-    auto [s, attr] = metadata_->getattr(inode_);
-    if (!s.ok()) {
-        return s;
-    }
+    if (cached_) {
+        buf->st_mode = attributes_.mode();
+        buf->st_size = attributes_.size();
+        buf->st_atime = attributes_.access_time();
+        buf->st_mtime = attributes_.modification_time();
+        buf->st_ctime = attributes_.creation_time();
+        buf->st_uid = attributes_.user_id();
+        buf->st_gid = attributes_.group_id();
+    } else {
+        // Get the file attributes from the metadata service
+        auto [s, attr] = metadata_->getattr(inode_);
+        if (!s.ok()) {
+            return s;
+        }
 
-    buf->st_mode = attr.mode();
-    buf->st_size = attr.size();
-    buf->st_atime = attr.access_time();
-    buf->st_mtime = attr.modification_time();
-    buf->st_ctime = attr.creation_time();
-    buf->st_uid = attr.user_id();
-    buf->st_gid = attr.group_id();
+        buf->st_mode = attr.mode();
+        buf->st_size = attr.size();
+        buf->st_atime = attr.access_time();
+        buf->st_mtime = attr.modification_time();
+        buf->st_ctime = attr.creation_time();
+        buf->st_uid = attr.user_id();
+        buf->st_gid = attr.group_id();
+    }
 
     return Status::OK();
 }
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
-    // Update the file attributes in the metadata service
-    auto [s, attr] = metadata_->getattr(inode_);
-    attr.set_access_time(tv[0].tv_sec);
-    attr.set_modification_time(tv[1].tv_sec);
+    if (cached_) {
+        attributes_.set_access_time(tv[0].tv_sec);
+        attributes_.set_modification_time(tv[1].tv_sec);
+    } else {
+        // Update the file attributes in the metadata service
+        auto [s, attr] = metadata_->getattr(inode_);
+        attr.set_access_time(tv[0].tv_sec);
+        attr.set_modification_time(tv[1].tv_sec);
 
-    s = setattr(attr);
+        s = setattr(attr);
+    }
 
     return Status::OK();
 }
@@ -285,6 +300,14 @@ Status FileHandle::cache() {
 
     cached_ = true; // Mark as cached
     ::close(fd); // Close the file descriptor after writing
+
+
+    // get the cache attributes from the metadata service
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
+    attributes_ = attr;
 
     return Status::OK();
 }

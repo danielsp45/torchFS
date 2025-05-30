@@ -56,6 +56,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     std::shared_ptr<MetadataClient> metadata_; // Metadata storage
     std::shared_ptr<StorageClient> storage_;   // Storage client
     std::vector<std::unique_ptr<FilePointer>> file_pointers_; // File pointers
+    Attributes attributes_;
     bool unlink_;
     bool cached_;
     std::mutex mutex_;
