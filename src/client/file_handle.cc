@@ -239,6 +239,7 @@ Status FileHandle::flush() {
     data.set_payload(buffer);
     data.set_len(filesize);
 
+    // ERROR: A MERDA ESTA AQUI
     auto [s, bytes_written] =
         storage_->write(chunk_nodes, parity_nodes, file_id, data);
     if (!s.ok()) {
@@ -261,6 +262,8 @@ Status FileHandle::flush() {
     if (!meta_status.ok()) {
         return meta_status;
     }
+
+    ::close(fd);
 
     return Status::OK();
 }
@@ -288,17 +291,18 @@ Status FileHandle::cache() {
     };
 
 
-    std::string file_id = std::to_string(inode_);
-    auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
+    // std::string file_id = std::to_string(inode_);
+    // auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
 
-    ssize_t written = ::write(fd, data.payload().c_str(), data.len());
-    if (written < 0 || static_cast<size_t>(written) != data.len()) {
-        return Status::IOError(
-            "Failed to write remote data to local file: " +
-            std::string(strerror(errno)));
-    }
+    // ssize_t written = ::write(fd, data.payload().c_str(), data.len());
+    // if (written < 0 || static_cast<size_t>(written) != data.len()) {
+    //     return Status::IOError(
+    //         "Failed to write remote data to local file: " +
+    //         std::string(strerror(errno)));
+    // }
 
     cached_ = true; // Mark as cached
+    ::close(fd); // Close the file descriptor after writing
 
     return Status::OK();
 }
@@ -306,10 +310,10 @@ Status FileHandle::cache() {
 Status FileHandle::uncache() {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
-    if (::unlink(path.c_str()) == -1) {
-        return Status::IOError("Failed to unlink file: " +
-                               std::string(strerror(errno)));
-    }
+    // if (::unlink(path.c_str()) == -1) {
+    //     return Status::IOError("Failed to unlink file: " +
+    //                            std::string(strerror(errno)));
+    // }
 
     cached_ = false; // Mark as uncached
     return Status::OK();

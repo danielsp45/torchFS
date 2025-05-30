@@ -164,6 +164,7 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
     char **parity_fragments = nullptr;
     uint64_t fragment_len = 0;
 
+    std::cout << "Encoding data for file ID: " << file_id << std::endl;
     int res = liberasurecode_encode(ec_descriptor_, data.payload().data(),
                                     data.len(), &data_fragments,
                                     &parity_fragments, &fragment_len);
@@ -172,13 +173,14 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         return {Status::IOError("Encode failed: " + std::to_string(res)), 0};
     }
 
+    std::cout << "Data encoded successfully, fragment length: "
+              << fragment_len << std::endl;
     // Write to data nodes
     for (int i = 0; i < EC_K; i++) {
         std::string node = data_nodes[i];
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};
         }
-
         Data node_data;
         node_data.set_len(fragment_len);
         node_data.set_payload(std::string(data_fragments[i], fragment_len));
@@ -189,18 +191,22 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         WriteResponse resp;
         brpc::Controller cntl;
 
-        nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::cerr << "Failed to write to data node " << node << ": "
-                      << cntl.ErrorText() << std::endl;
-        } else {
-            std::cout << "Wrote data to node " << node << std::endl;
-        }
+        // MERDA AQUI
+        // nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        // if (cntl.Failed()) {
+        //     std::cerr << "Failed to write to data node " << node << ": "
+        //               << cntl.ErrorText() << std::endl;
+        // } else {
+        //     std::cout << "Wrote data to node " << node << std::endl;
+        // }
     }
+
+    std::cout << "Data written to data nodes successfully." << std::endl;
 
     // Write to parity nodes
     for (int i = 0; i < EC_M; i++) {
         std::string node = parity_nodes[i];
+        std::cout << "Writing parity to node: " << node << std::endl;
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};
         }
@@ -215,20 +221,24 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         WriteResponse resp;
         brpc::Controller cntl;
 
-        nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::cerr << "Failed to write to parity node " << node << ": "
-                      << cntl.ErrorText() << std::endl;
-        } else {
-            std::cout << "Wrote parity to node " << node << std::endl;
-        }
+        // MERDA AQUI
+        // nodes_[node]->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        // if (cntl.Failed()) {
+        //     std::cerr << "Failed to write to parity node " << node << ": "
+        //               << cntl.ErrorText() << std::endl;
+        // } else {
+        //     std::cout << "Wrote parity to node " << node << std::endl;
+        // }
     }
+
+    std::cout << "Parity written to parity nodes successfully." << std::endl;
 
     res = liberasurecode_encode_cleanup(ec_descriptor_, data_fragments,
                                         parity_fragments);
     if (res != 0) {
         return {Status::IOError("Encode cleanup failed!"), 0};
     }
+    std::cout << "Encode cleanup successful." << std::endl;
     return {Status::OK(), 0}; // resp.bytes_written()};
 }
 
