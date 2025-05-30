@@ -24,12 +24,12 @@ class StorageEngine {
 
     Status init();
 
-    Status open(const std::string &path, int flagse);
+    Status open(const std::string &path, int flagse, FilePointer **out_fp);
     Status create(const std::string &path);
-    Status close(std::string &path);
-    Status remove(const std::string path);
-    Status read(std::string &path, Slice result, size_t size, off_t offset);
-    Status write(std::string &path, Slice data, size_t size, off_t offset);
+    Status close(FilePointer *fp);
+    Status unlink(const std::string path);
+    Status read(FilePointer *fp, Slice result, size_t size, off_t offset);
+    Status write(FilePointer *fp, Slice data, size_t size, off_t offset);
     Status sync(std::string path);
     Status rename(const std::string &oldpath, const std::string &newpath);
     Status getattr(const std::string &path, struct stat *stbuf);
