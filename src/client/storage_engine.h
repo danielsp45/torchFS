@@ -6,7 +6,7 @@
 #include "fuse.h"
 #include "status.h"
 #include "cache.h"
-#include "cache_policies/lfu_policy.h"
+#include "cache_policies/filo_policy.h"
 
 #include <memory>
 
@@ -18,7 +18,7 @@ class StorageEngine {
               0, 1, "/", mount_path,
               std::make_shared<MetadataClient>(),
               std::make_shared<StorageClient>())),
-          cache_(std::make_unique<LFUEvictionPolicy>()) {}
+          cache_(std::make_unique<FILOEvictionPolicy>()) {}
 
     ~StorageEngine() {}
 

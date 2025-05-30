@@ -5,7 +5,7 @@
 
 /**
  * FIRST IN LAST OUT eviction policy
- * Always evicts the last element inserted
+ * Evicts the last element inserted
  */
 class FILOEvictionPolicy : public IEvictionPolicy {
     public:

@@ -5,7 +5,7 @@
 
 /**
  * FIRST IN FIRST OUT eviction policy
- * Always evicts the oldest element inserted
+ * Evicts the oldest element inserted
  */
 class FIFOEvictionPolicy : public IEvictionPolicy {
     public:

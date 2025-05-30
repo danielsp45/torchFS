@@ -9,7 +9,7 @@ class IEvictionPolicy;
 class Cache {
     public:
         Cache(std::unique_ptr<IEvictionPolicy> policy);
-        std::shared_ptr<FileHandle> is_cached(const std::string &key);
+        std::shared_ptr<FileHandle> lookup(const std::string &key);
         void insert(const std::string &key, std::shared_ptr<FileHandle> value);
 
     private:

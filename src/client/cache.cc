@@ -7,7 +7,7 @@ Cache::Cache(std::unique_ptr<IEvictionPolicy> policy) {
     policy_ = std::move(policy);
 }
 
-std::shared_ptr<FileHandle> Cache::is_cached(const std::string &key) {
+std::shared_ptr<FileHandle> Cache::lookup(const std::string &key) {
     auto it = index_.find(key);
     if (it == index_.end()) {
         return nullptr;

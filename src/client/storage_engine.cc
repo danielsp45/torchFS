@@ -19,7 +19,7 @@ Status StorageEngine::init() {
 }
 
 Status StorageEngine::open(const std::string &path, int flags) {
-    std::shared_ptr<FileHandle> cached_fh = cache_.is_cached(path);
+    std::shared_ptr<FileHandle> cached_fh = cache_.lookup(path);
     
     if (cached_fh) {
         std::cout << "Cached" << std::endl;

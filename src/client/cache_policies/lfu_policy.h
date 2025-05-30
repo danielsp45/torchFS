@@ -7,61 +7,61 @@
 
 /**
  * LEAST FREQUENTLY USED eviction policy
- * Always evicts the key with the lowest access frequency
+ * Evicts the element with the lowest access frequency
  */
 class LFUEvictionPolicy : public IEvictionPolicy {
     public:
-        LFUEvictionPolicy() : minFreq_(0) {}
+        LFUEvictionPolicy() : min_freq_(0) {}
 
         void insert(const std::string &key) override { // O(1)
-            minFreq_ = 1;
-            freqBuckets_[1].push_back(key);
-            keyData_[key] = {1, --freqBuckets_[1].end()};
+            min_freq_ = 1;
+            freq_buckets_[1].push_back(key);
+            key_data_[key] = {1, --freq_buckets_[1].end()};
         }
 
         void remove(const std::string &key) override { // O(1)
-            auto kd = keyData_.find(key);
-            if (kd == keyData_.end()) return;
+            auto kd = key_data_.find(key);
+            if (kd == key_data_.end()) return;
 
             uint old_f = kd->second.freq;
-            auto &bucket = freqBuckets_[old_f];
+            auto &bucket = freq_buckets_[old_f];
             bucket.erase(kd->second.it);
             
             if (bucket.empty()) {
-                freqBuckets_.erase(old_f);
-                if (minFreq_ == old_f) ++minFreq_;
+                freq_buckets_.erase(old_f);
+                if (min_freq_ == old_f) ++min_freq_;
             }
-            keyData_.erase(kd);
+            key_data_.erase(kd);
         }
     
         void update(const std::string &key) override { // O(1)
-            auto kd = keyData_.find(key);
-            if (kd == keyData_.end()) return;
+            auto kd = key_data_.find(key);
+            if (kd == key_data_.end()) return;
 
             uint old_f = kd->second.freq;
-            auto &oldBucket = freqBuckets_[old_f];
+            auto &oldBucket = freq_buckets_[old_f];
             oldBucket.erase(kd->second.it);
 
             if (oldBucket.empty()) {
-                freqBuckets_.erase(old_f);
-                if (minFreq_ == old_f) ++minFreq_;
+                freq_buckets_.erase(old_f);
+                if (min_freq_ == old_f) ++min_freq_;
             }
 
             uint new_f = old_f + 1;
-            freqBuckets_[new_f].push_back(key);
-            kd->second = {new_f, --freqBuckets_[new_f].end()};
+            freq_buckets_[new_f].push_back(key);
+            kd->second = {new_f, --freq_buckets_[new_f].end()};
         }
 
         std::string evict() override { // O(1)
-            if (keyData_.empty()) {
+            if (key_data_.empty()) {
                 return "";
             }
-            auto &bucket = freqBuckets_[minFreq_];
+            auto &bucket = freq_buckets_[min_freq_];
             const std::string victim = bucket.front();
             bucket.pop_front();
-            keyData_.erase(victim);
+            key_data_.erase(victim);
             if (bucket.empty()) {
-                freqBuckets_.erase(minFreq_);
+                freq_buckets_.erase(min_freq_);
             }
             return victim;
         }
@@ -71,7 +71,7 @@ class LFUEvictionPolicy : public IEvictionPolicy {
             uint freq;
             std::list<std::string>::iterator it;
         };
-        std::unordered_map<int, std::list<std::string>> freqBuckets_;
-        std::unordered_map<std::string, KeyInfo> keyData_;
-        uint minFreq_;
+        std::unordered_map<int, std::list<std::string>> freq_buckets_;
+        std::unordered_map<std::string, KeyInfo> key_data_;
+        uint min_freq_;
 };
