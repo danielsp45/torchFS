@@ -14,6 +14,28 @@
 #include "status.h"
 #include "util.h"
 
+
+void stat_to_attr(const struct stat &st, Attributes &a) {
+    a.set_mode(st.st_mode);
+    a.set_size(st.st_size);
+    a.set_access_time(st.st_atime);
+    a.set_modification_time(st.st_mtime);
+    a.set_creation_time(st.st_ctime);
+    a.set_user_id(st.st_uid);
+    a.set_group_id(st.st_gid);
+}
+
+// Convert our Attributes proto → POSIX stat buffer
+void attr_to_stat(const Attributes &a, struct stat *st) {
+    st->st_mode = a.mode();
+    st->st_size = a.size();
+    st->st_atime = a.access_time();
+    st->st_mtime = a.modification_time();
+    st->st_ctime = a.creation_time();
+    st->st_uid  = a.user_id();
+    st->st_gid  = a.group_id();
+}
+
 Status FileHandle::init() {
     if (inode_ == static_cast<uint64_t>(-1)) {
         // we need to create the file in the metadata too
@@ -139,27 +161,13 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
 
 Status FileHandle::getattr(struct stat *buf) {
     if (cached_) {
-        buf->st_mode = attributes_.mode();
-        buf->st_size = attributes_.size();
-        buf->st_atime = attributes_.access_time();
-        buf->st_mtime = attributes_.modification_time();
-        buf->st_ctime = attributes_.creation_time();
-        buf->st_uid = attributes_.user_id();
-        buf->st_gid = attributes_.group_id();
+        attr_to_stat(attributes_, buf);
     } else {
-        // Get the file attributes from the metadata service
         auto [s, attr] = metadata_->getattr(inode_);
         if (!s.ok()) {
             return s;
         }
-
-        buf->st_mode = attr.mode();
-        buf->st_size = attr.size();
-        buf->st_atime = attr.access_time();
-        buf->st_mtime = attr.modification_time();
-        buf->st_ctime = attr.creation_time();
-        buf->st_uid = attr.user_id();
-        buf->st_gid = attr.group_id();
+        attr_to_stat(attr, buf);
     }
 
     return Status::OK();
@@ -245,15 +253,7 @@ Status FileHandle::flush() {
 
     // Update metadata attributes based on local filesystem.
     Attributes attr;
-    attr.set_mode(st.st_mode);
-    attr.set_path(filename(logic_path_));
-    attr.set_size(st.st_size);
-    attr.set_access_time(st.st_atime);
-    attr.set_modification_time(st.st_mtime);
-    attr.set_creation_time(st.st_ctime);
-    attr.set_inode(inode_);
-    attr.set_user_id(st.st_uid);
-    attr.set_group_id(st.st_gid);
+    stat_to_attr(st, attr);
 
     Status meta_status = setattr(attr);
     if (!meta_status.ok()) {
@@ -298,7 +298,6 @@ Status FileHandle::cache() {
             std::string(strerror(errno)));
     }
 
-    cached_ = true; // Mark as cached
     ::close(fd); // Close the file descriptor after writing
 
 
@@ -308,6 +307,8 @@ Status FileHandle::cache() {
         return s;
     }
     attributes_ = attr;
+
+    cached_ = true; // Mark as cached
 
     return Status::OK();
 }
@@ -325,11 +326,16 @@ Status FileHandle::uncache() {
 }
 
 Status FileHandle::setattr(Attributes &attr) {
-
-    // Update the file attributes in the metadata service.
-    auto s = metadata_->setattr(attr);
-    if (!s.ok()) {
-        return s;
+    if (cached_) {
+        // Update the local attributes
+        attributes_.CopyFrom(attr);
+        return Status::OK();
+    } else {
+        // Update the file attributes in the metadata service.
+        auto s = metadata_->setattr(attr);
+        if (!s.ok()) {
+            return s;
+        }
     }
     return Status::OK();
 }
