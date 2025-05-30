@@ -10,9 +10,9 @@
 
 StorageClient::StorageClient() {
     const std::vector<std::pair<std::string, std::string>> servers = {
-        {"node1", "127.0.0.1:9000"}, {"node2", "127.0.0.1:9001"},
-        {"node3", "127.0.0.1:9002"}, {"node4", "127.0.0.1:9003"},
-        {"node5", "127.0.0.1:9004"}, {"node6", "127.0.0.1:9005"}};
+        {"node1", "127.0.0.1:9001"}, {"node2", "127.0.0.1:9002"},
+        {"node3", "127.0.0.1:9003"}, {"node4", "127.0.0.1:9004"},
+        {"node5", "127.0.0.1:9005"}, {"node6", "127.0.0.1:9006"}};
 
     for (const auto &entry : servers) {
         const std::string &server_name = entry.first;
@@ -80,7 +80,6 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
             std::cerr << "Failed to read from data node " << node << ": "
                       << cntl.ErrorText() << std::endl;
         } else {
-            std::cout << "Read data from node " << node << std::endl;
             fragment_data.push_back(resp.payload());
             if (frag_len == 0) {
                 frag_len = resp.len();
@@ -108,7 +107,6 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
             std::cerr << "Failed to read from parity node " << node << ": "
                       << cntl.ErrorText() << std::endl;
         } else {
-            std::cout << "Read parity from node " << node << std::endl;
             fragment_data.push_back(resp.payload());
         }
     }
@@ -178,7 +176,6 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), 0};
         }
-
         Data node_data;
         node_data.set_len(fragment_len);
         node_data.set_payload(std::string(data_fragments[i], fragment_len));
@@ -193,10 +190,9 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         if (cntl.Failed()) {
             std::cerr << "Failed to write to data node " << node << ": "
                       << cntl.ErrorText() << std::endl;
-        } else {
-            std::cout << "Wrote data to node " << node << std::endl;
         }
     }
+
 
     // Write to parity nodes
     for (int i = 0; i < EC_M; i++) {
@@ -219,9 +215,7 @@ StorageClient::write(const std::vector<std::string> &data_nodes,
         if (cntl.Failed()) {
             std::cerr << "Failed to write to parity node " << node << ": "
                       << cntl.ErrorText() << std::endl;
-        } else {
-            std::cout << "Wrote parity to node " << node << std::endl;
-        }
+        }    
     }
 
     res = liberasurecode_encode_cleanup(ec_descriptor_, data_fragments,
