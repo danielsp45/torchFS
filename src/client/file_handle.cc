@@ -59,7 +59,6 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(FilePointer **out_fp, int flags) {
-    std::cerr << logic_path_ << " IS CACHED: " << cached_ << std::endl;
     if (!fetched_) {
         Status s = fetch();
         if (!s.ok()) {
@@ -99,7 +98,6 @@ Status FileHandle::close(FilePointer *fp) {
     }
 
     if (!cached_ && fetched_ && file_pointers_.empty()) {
-        std::cerr << "REMOVING FROM LOCAL" << std::endl;
         Status s = remove_local();
         if (!s.ok()) {
             return s;
@@ -211,7 +209,6 @@ void FileHandle::cache() {
         // If the file is not fetched, we need to fetch it first
         Status s = fetch();
         if (!s.ok()) {
-            std::cerr << "Failed to fetch file: " << s.ToString() << std::endl;
             return;
         }
     }
@@ -228,7 +225,6 @@ void FileHandle::uncache() {
         // If the file is fetched and there are no open file pointers, remove it
         Status s = remove_local();
         if (!s.ok()) {
-            std::cerr << "Failed to remove local file: " << s.ToString() << std::endl;
         }
     }
 
@@ -302,7 +298,13 @@ Status FileHandle::flush() {
 }
 
 Status FileHandle::fetch() {
-    std::cerr << "FETCHING: " << logic_path_ << std::endl;
+    // get the cache attributes from the metadata service
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
+    attributes_ = attr;
+
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     int fd = ::open(path.c_str(), O_RDWR | O_CREAT);
@@ -311,39 +313,35 @@ Status FileHandle::fetch() {
                                 std::string(strerror(errno)));
     }
 
-    // Retrieve the file from remote storage
-    std::vector<std::string> chunk_nodes{
-        "node1",
-        "node2",
-        "node3",
-        "node4",
-    };
+    if (attributes_.size() > 0) {
+        // Only fetch the file if it has a size greater than 0
 
-    std::vector<std::string> parity_nodes{
-        "node5",
-        "node6",
-    };
+        // Retrieve the file from remote storage
+        std::vector<std::string> chunk_nodes{
+            "node1",
+            "node2",
+            "node3",
+            "node4",
+        };
 
+        std::vector<std::string> parity_nodes{
+            "node5",
+            "node6",
+        };
 
-    std::string file_id = std::to_string(inode_);
-    auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
+        std::string file_id = std::to_string(inode_);
+        auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
 
-    ssize_t written = ::write(fd, data.payload().c_str(), data.len());
-    if (written < 0 || static_cast<size_t>(written) != data.len()) {
-        return Status::IOError(
-            "Failed to write remote data to local file: " +
-            std::string(strerror(errno)));
+        ssize_t written = ::write(fd, data.payload().c_str(), data.len());
+        if (written < 0 || static_cast<size_t>(written) != data.len()) {
+            return Status::IOError(
+                "Failed to write remote data to local file: " +
+                std::string(strerror(errno)));
+        }
     }
 
     ::close(fd); // Close the file descriptor after writing
 
-
-    // get the cache attributes from the metadata service
-    auto [s, attr] = metadata_->getattr(inode_);
-    if (!s.ok()) {
-        return s;
-    }
-    attributes_ = attr;
 
     fetched_ = true;
 
