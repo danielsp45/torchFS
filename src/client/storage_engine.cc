@@ -21,19 +21,19 @@ Status StorageEngine::init() {
 Status StorageEngine::open(const std::string &path, int flags, 
                            FilePointer **out_fp) {
 
-    std::shared_ptr<FileHandle> cached_fh = cache_.lookup(path);
+    // std::shared_ptr<FileHandle> cached_fh = cache_.lookup(path);
     
-    if (cached_fh) {
-        std::cout << "Cached" << std::endl;
-        Status s = cached_fh->open(out_fp, flags);
-        if (!s.ok()) {
-            return s;
-        }
-        return Status::OK();
-    }
+    // if (cached_fh) {
+    //     std::cout << "Cached" << std::endl;
+    //     Status s = cached_fh->open(out_fp, flags);
+    //     if (!s.ok()) {
+    //         return s;
+    //     }
+    //     return Status::OK();
+    // }
 
-    // File is not cached
-    std::cout << "Not Cached" << std::endl;
+    // // File is not cached
+    // std::cout << "Not Cached" << std::endl;
     auto [s, fh] = find_file(path);
     if (!fh) {
         return Status::NotFound("File not found");
