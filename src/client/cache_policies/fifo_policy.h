@@ -9,30 +9,30 @@
  */
 class FIFOEvictionPolicy : public IEvictionPolicy {
     public:
-        void insert(const std::string &key) override { // O(1)
+        void insert(const uint64_t &key) override { // O(1)
             queue_.push_back(key);
         }
 
-        void remove(const std::string &key) override { // O(N) (Not used often)
+        void remove(const uint64_t &key) override { // O(N) (Not used often)
             auto it = std::find(queue_.begin(), queue_.end(), key);
             if (it != queue_.end()) {
                 queue_.erase(it);
             }
         }
 
-        void update(const std::string &/*key*/) override {
+        void update(const uint64_t &/*key*/) override {
             // FIFO doesn't reorder on access
         }
 
-        std::string evict() override { // O(1)
+        uint64_t evict() override { // O(1)
             if (queue_.empty()) {
-                return "";
+                return -1;
             }
-            std::string key = queue_.front();
+            uint64_t key = queue_.front();
             queue_.pop_front();
             return key;
         }
 
     private:
-        std::list<std::string> queue_;
+        std::list<uint64_t> queue_;
 };

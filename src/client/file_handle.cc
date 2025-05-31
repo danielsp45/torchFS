@@ -59,6 +59,7 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(FilePointer **out_fp, int flags) {
+    std::cerr << logic_path_ << " IS CACHED: " << cached_ << std::endl;
     if (!fetched_) {
         Status s = fetch();
         if (!s.ok()) {
@@ -98,12 +99,12 @@ Status FileHandle::close(FilePointer *fp) {
     }
 
     if (!cached_ && fetched_ && file_pointers_.empty()) {
+        std::cerr << "REMOVING FROM LOCAL" << std::endl;
         Status s = remove_local();
         if (!s.ok()) {
             return s;
         }
     }
-
 
     return Status::OK();
 }
@@ -200,6 +201,41 @@ Status FileHandle::setattr(Attributes &attr) {
     return Status::OK();
 }
 
+void FileHandle::cache() {
+    if (cached_) {
+        // If the file is already cached, no need to cache again
+        return;
+    }
+
+    if (!fetched_) {
+        // If the file is not fetched, we need to fetch it first
+        Status s = fetch();
+        if (!s.ok()) {
+            std::cerr << "Failed to fetch file: " << s.ToString() << std::endl;
+            return;
+        }
+    }
+
+    cached_ = true;
+};
+
+void FileHandle::uncache() {
+    if (!cached_) {
+        return; // Already uncached
+    }
+
+    if (fetched_ && file_pointers_.empty()) {
+        // If the file is fetched and there are no open file pointers, remove it
+        Status s = remove_local();
+        if (!s.ok()) {
+            std::cerr << "Failed to remove local file: " << s.ToString() << std::endl;
+        }
+    }
+
+    cached_ = false;
+};
+
+
 Status FileHandle::flush() {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
@@ -266,6 +302,7 @@ Status FileHandle::flush() {
 }
 
 Status FileHandle::fetch() {
+    std::cerr << "FETCHING: " << logic_path_ << std::endl;
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     int fd = ::open(path.c_str(), O_RDWR | O_CREAT);

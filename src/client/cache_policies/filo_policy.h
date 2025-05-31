@@ -9,30 +9,30 @@
  */
 class FILOEvictionPolicy : public IEvictionPolicy {
     public:
-        void insert(const std::string &key) override { // O(1)
+        void insert(const uint64_t &key) override { // O(1)
             stack_.push_back(key);
         }
 
-        void remove(const std::string &key) override { // O(N) (Not used often)
+        void remove(const uint64_t &key) override { // O(N) (Not used often)
             auto it = std::find(stack_.begin(), stack_.end(), key);
             if (it != stack_.end()) {
                 stack_.erase(it);
             }
         }
         
-        void update(const std::string &/*key*/) override {
+        void update(const uint64_t &/*key*/) override {
             // FILO doesn't need to update or reorder elements
         }
         
-        std::string evict() override { // O(1)
+        uint64_t evict() override { // O(1)
             if (stack_.empty()) { 
-                return "";
+                return -1;
             }
-            std::string key = stack_.back();
+            uint64_t key = stack_.back();
             stack_.pop_back();
             return key;
         }
 
     private:
-        std::list<std::string> stack_;
+        std::list<uint64_t> stack_;
 };

@@ -49,8 +49,8 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
 
     void unlink() {unlink_ = true;};
 
-    void cache() {cached_ = true;};
-    void uncache() {cached_ = false;};
+    void cache();
+    void uncache();
 
   private:
     uint64_t p_inode_;       // Parent inode

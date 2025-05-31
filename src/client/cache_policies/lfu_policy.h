@@ -13,13 +13,13 @@ class LFUEvictionPolicy : public IEvictionPolicy {
     public:
         LFUEvictionPolicy() : min_freq_(0) {}
 
-        void insert(const std::string &key) override { // O(1)
+        void insert(const uint64_t &key) override { // O(1)
             min_freq_ = 1;
             freq_buckets_[1].push_back(key);
             key_data_[key] = {1, --freq_buckets_[1].end()};
         }
 
-        void remove(const std::string &key) override { // O(1)
+        void remove(const uint64_t &key) override { // O(1)
             auto kd = key_data_.find(key);
             if (kd == key_data_.end()) return;
 
@@ -34,7 +34,7 @@ class LFUEvictionPolicy : public IEvictionPolicy {
             key_data_.erase(kd);
         }
     
-        void update(const std::string &key) override { // O(1)
+        void update(const uint64_t &key) override { // O(1)
             auto kd = key_data_.find(key);
             if (kd == key_data_.end()) return;
 
@@ -52,12 +52,12 @@ class LFUEvictionPolicy : public IEvictionPolicy {
             kd->second = {new_f, --freq_buckets_[new_f].end()};
         }
 
-        std::string evict() override { // O(1)
+        uint64_t evict() override { // O(1)
             if (key_data_.empty()) {
-                return "";
+                return -1;
             }
             auto &bucket = freq_buckets_[min_freq_];
-            const std::string victim = bucket.front();
+            const uint64_t victim = bucket.front();
             bucket.pop_front();
             key_data_.erase(victim);
             if (bucket.empty()) {
@@ -69,9 +69,9 @@ class LFUEvictionPolicy : public IEvictionPolicy {
     private:
         struct KeyInfo {
             uint freq;
-            std::list<std::string>::iterator it;
+            std::list<uint64_t>::iterator it;
         };
-        std::unordered_map<int, std::list<std::string>> freq_buckets_;
-        std::unordered_map<std::string, KeyInfo> key_data_;
+        std::unordered_map<int, std::list<uint64_t>> freq_buckets_;
+        std::unordered_map<uint64_t, KeyInfo> key_data_;
         uint min_freq_;
 };
