@@ -64,7 +64,7 @@ Traditional file systems are designed to handle a wide variety of workloads, inc
 
 To know how to optimize our filesystem to suit PyTorch workloads, we first needed to understand how PyTorch accesses data. Therefore, we have to first profile the PyTorch data access patterns. 
 
-We profiled the data acess patterns of PyTorch using a passthrough implementation of FUSE that logged the accesses made to files during training. We evaluated the access patterns with two different datasets: resnet and cosmoflow, with 1 and 4 GPUs each. Resnet is a composed of a few large files (~80MB each), while cosmoflow is composed of many small files (~64KB each). These four configurations let us evaluate the access patterns of PyTorch in different scenarios.
+We profiled the data acess patterns of PyTorch using a passthrough implementation of FUSE @fuse that logged the accesses made to files during training. We evaluated the access patterns with two different datasets: resnet and cosmoflow, with 1 and 4 GPUs each. Resnet is a composed of a few large files (~80MB each), while cosmoflow is composed of many small files (~64KB each). These four configurations let us evaluate the access patterns of PyTorch in different scenarios.
 
 After evaluation, we found the PyTorch access pattern to be as follows:
 1. Epoch Starts
@@ -100,12 +100,88 @@ This behaviour brings us some insights into how we can optimize our filesystem t
 
 = The TorchFS design
 
-#lorem(100)
+TorchFS addresses the unique demands of machine learning workloads through three core design objectives: scalability, performance, and availability. The system employs a decoupled architecture that separates metadata management from data storage operations, enabling each component to scale independently while optimizing for the distinct access patterns characteristic of ML applications.
 
-= Implementation
+The architecture comprises three interconnected components: the client component exposes a standard POSIX filesystem interface, providing transparent access to the distributed storage infrastructure while ensuring compatibility with existing ML frameworks and training pipelines; a data storage cluster that manages all file operations including reads, writes, and deletions, operating independently from metadata operations to maximize throughput; and a metadata cluster that maintains the filesystem namespace (file attributes and directories) and manages the mapping between logical file paths and their physical storage locations across the data cluster.
 
-#lorem(100)
+This separation of concerns enables TorchFS to scale each subsystem according to workload demands. Metadata operations, which involve namespace traversal and file discovery, are handled exclusively by the metadata cluster. Most of data operations bypass the metadata cluster during execution, allowing the storage infrastructure to scale horizontally based on bandwidth and storage capacity requirements without creating bottlenecks in the metadata layer.
+
+TorchFS incorporates performance optimizations tailored to ML training patterns. The system implements aggressive read caching to maintain frequently accessed data locally on the client, reducing latency during training iterations. The prefetching mechanism anticipates future data requirements based on the access patterns mentioned above, ensuring that required data is available before the ML framework requests it. These techniques effectively hide the latency associated with distributed storage access while leveraging the predictable and sequential nature of ML dataset consumption.
+
+The system maintains high availability through comprehensive fault tolerance mechanisms. The metadata cluster employs the Raft consensus algorithm to ensure consistency and availability of the filesystem namespace in case of any metadata server failures. Data durability is achieved through erasure coding applied to data chunks distributed across the storage cluster. This approach delivers configurable fault tolerance levels while maintaining storage efficiency, enabling the system to tolerate multiple simultaneous server failures while preserving data integrity and operational continuity.
+
+= Client Operation
+
+- Here we descrube TorchFS interaction with applications by descibring client operation (interaction between applications and distributed storage via client)
+
+- Client runs on the host and exposes a file system interface to applications
+
+- TorchFS client runs in user space and can be accessed as a mounted file system via FUSE @fuse
+
+- Translates posix calls to distributed filesystem operations
+
+== Client-Side Operation Processing
+
+- Open Flow
+  - client contacts metadata server to fetch file inode, attributes 
+  - Client gets a FileHandle to call operations over that file
+
+- Read Flow
+  - Client checks if the file is cached locally
+    - Read
+  - If not requests the location of the file chunks to the metadata server
+    - Fetch erasure code chunks from the storage nodes
+    - Rebuild the file with erasure decoding of the chunks
+    - Cache the file locally
+    - Read
+
+- Write flow
+  - File is local
+    - Write to the FileHandle
+  - FIle is remote
+    - Fetch the file like in read
+    - Write to the file
+  - Flushing to the storage nodes implies encoding the file to get the shards and send them to each server accordingly
+
+- CLose flow
+  - If theres no one using the file, flush it to storage even if cached
+  - Update metadata in metadata server
+  - Fsync
+  - Remove the file if not cached
+
+== Erasure Coding
+
+- Fault tolerance, Space Optimization
+
+== Caching and Prefetching
+
+- Client maintains its own file data cache,
+independent of the kernel page or buffer caches, making
+it accessible to applications that use the mounted filesystem
+
+= Distributed Metadata
+
+- Raft, RocksDB, Centralized approach
+
+= Distributed Storage
+
+- Nothing special, rely on OS optimizations
+
+= Performance Evaluation (and Scalability?)
+
+- Resnet & cosmoflow
+  - Test with different optimization configurations
+
+- Resnet (max)
+
+- cosmoflow (max)
+
+- NFS (max)
+
+= Related Work
+
+#lorem(50)
 
 = Conclusion
 
-#lorem(100)
+#lorem(50)
