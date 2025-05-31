@@ -2,6 +2,8 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <shared_mutex>   // for std::shared_mutex, std::shared_lock, etc.
+
 #include "file_handle.h"
 
 class IEvictionPolicy;

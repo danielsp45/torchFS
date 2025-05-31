@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <shared_mutex>
 
 struct FilePointer;
 
@@ -53,6 +54,9 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     void uncache();
 
   private:
+    // Protects attributes_, file_pointers_, fetched_, written_, etc.
+    mutable std::shared_mutex mu_;
+
     uint64_t p_inode_;       // Parent inode
     uint64_t inode_;         // Unique identifier for the file
     std::string logic_path_; // Logical path of the file
@@ -71,9 +75,8 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     Status fetch();
     Status remove_local();
 
-
-  void stat_to_attr(const struct stat &st, Attributes &a);
-  void attr_to_stat(const Attributes &a, struct stat *st);
+    void stat_to_attr(const struct stat &st, Attributes &a);
+    void attr_to_stat(const Attributes &a, struct stat *st);
 };
 
 struct FilePointer {

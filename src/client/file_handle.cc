@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -29,6 +30,8 @@ Status FileHandle::init() {
 }
 
 Status FileHandle::destroy() {
+    std::unique_lock lk(mu_);
+
     if (fetched_) {
         Status s = remove_local();
         if (!s.ok()) {
@@ -59,6 +62,8 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(FilePointer **out_fp, int flags) {
+    std::unique_lock lk(mu_);
+
     if (!fetched_) {
         Status s = fetch();
         if (!s.ok()) {
@@ -79,6 +84,8 @@ Status FileHandle::open(FilePointer **out_fp, int flags) {
 }
 
 Status FileHandle::close(FilePointer *fp) {
+    std::unique_lock lk(mu_);
+
     auto it = std::find_if(file_pointers_.begin(), file_pointers_.end(),
                            [fp](const std::unique_ptr<FilePointer> &p) {
                                return p.get() == fp;
@@ -108,6 +115,8 @@ Status FileHandle::close(FilePointer *fp) {
 }
 
 Status FileHandle::read(FilePointer *fp, Slice &dst, size_t size, off_t offset) {
+    std::shared_lock lk(mu_);
+
     ssize_t bytes_read = fp->read(dst, size, offset);
     if (bytes_read < 0) {
         return Status::IOError("Failed to read file: " +
@@ -118,6 +127,8 @@ Status FileHandle::read(FilePointer *fp, Slice &dst, size_t size, off_t offset) 
 }
 
 Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset) {
+    std::unique_lock lk(mu_);
+
     // Write the data to the local file
     ssize_t written = fp->write(src, count, offset);
 
@@ -143,6 +154,8 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
 }
 
 Status FileHandle::getattr(struct stat *buf) {
+    std::shared_lock lk(mu_);
+
     if (cached_) {
         attr_to_stat(attributes_, buf);
     } else {
@@ -157,6 +170,8 @@ Status FileHandle::getattr(struct stat *buf) {
 }
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
+    std::unique_lock lk(mu_);
+
     if (cached_) {
         attributes_.set_access_time(tv[0].tv_sec);
         attributes_.set_modification_time(tv[1].tv_sec);
@@ -200,6 +215,8 @@ Status FileHandle::setattr(Attributes &attr) {
 }
 
 void FileHandle::cache() {
+    std::unique_lock lk(mu_);
+
     if (cached_) {
         // If the file is already cached, no need to cache again
         return;
@@ -217,6 +234,8 @@ void FileHandle::cache() {
 };
 
 void FileHandle::uncache() {
+    std::unique_lock lk(mu_);
+
     if (!cached_) {
         return; // Already uncached
     }
