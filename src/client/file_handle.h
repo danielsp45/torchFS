@@ -23,7 +23,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
                std::shared_ptr<StorageClient> storage)
         : p_inode_(p_inode), inode_(inode), logic_path_(logic_path),
           mount_path_(mount_path), metadata_(metadata), storage_(storage),
-          file_pointers_(), unlink_(false), cached_(false) {}
+          file_pointers_(), unlink_(false), cached_(false), fetched_(false), written_(false) {}
 
     ~FileHandle() {}
 
@@ -32,7 +32,6 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     // Status open(int flags);
     Status open(FilePointer **fp, int flags); 
     Status close(FilePointer *fp);
-    Status unlink();
     Status read(FilePointer *fp, Slice &dst, size_t size, off_t offset);
     Status write(FilePointer *fp, Slice &src, size_t count, off_t offset);
     Status getattr(struct stat *buf);
@@ -48,6 +47,11 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     void set_parent_inode(const uint64_t &p_inode) { p_inode_ = p_inode; }
     bool is_unlinked() const { return unlink_ && file_pointers_.empty(); }
 
+    void unlink() {unlink_ = true;};
+
+    void cache();
+    void uncache();
+
   private:
     uint64_t p_inode_;       // Parent inode
     uint64_t inode_;         // Unique identifier for the file
@@ -59,12 +63,17 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     Attributes attributes_;
     bool unlink_;
     bool cached_;
-    std::mutex mutex_;
+    bool fetched_;
+    bool written_;
 
     Status setattr(Attributes &attr);
     Status flush();
-    Status cache();
-    Status uncache();
+    Status fetch();
+    Status remove_local();
+
+
+  void stat_to_attr(const struct stat &st, Attributes &a);
+  void attr_to_stat(const Attributes &a, struct stat *st);
 };
 
 struct FilePointer {

@@ -15,27 +15,6 @@
 #include "util.h"
 
 
-void stat_to_attr(const struct stat &st, Attributes &a) {
-    a.set_mode(st.st_mode);
-    a.set_size(st.st_size);
-    a.set_access_time(st.st_atime);
-    a.set_modification_time(st.st_mtime);
-    a.set_creation_time(st.st_ctime);
-    a.set_user_id(st.st_uid);
-    a.set_group_id(st.st_gid);
-}
-
-// Convert our Attributes proto → POSIX stat buffer
-void attr_to_stat(const Attributes &a, struct stat *st) {
-    st->st_mode = a.mode();
-    st->st_size = a.size();
-    st->st_atime = a.access_time();
-    st->st_mtime = a.modification_time();
-    st->st_ctime = a.creation_time();
-    st->st_uid  = a.user_id();
-    st->st_gid  = a.group_id();
-}
-
 Status FileHandle::init() {
     if (inode_ == static_cast<uint64_t>(-1)) {
         // we need to create the file in the metadata too
@@ -50,12 +29,13 @@ Status FileHandle::init() {
 }
 
 Status FileHandle::destroy() {
-    // delete the file from the local storage
-    std::string inode_str = std::to_string(inode_);
-    std::string path = join_paths(mount_path_, inode_str);
-    if (::unlink(path.c_str()) == -1) {
-        return Status::IOError("destroy failed: " + std::string(strerror(errno)));
+    if (fetched_) {
+        Status s = remove_local();
+        if (!s.ok()) {
+            return s;
+        }
     }
+
     auto s = metadata_->remove_file(p_inode_, inode_, filename(logic_path_));
     if (!s.ok()) {
         return s;
@@ -79,14 +59,16 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(FilePointer **out_fp, int flags) {
-    if (!cached_) {
-        cache();
+    if (!fetched_) {
+        Status s = fetch();
+        if (!s.ok()) {
+            return s;
+        }
     }
 
     std::string inode_str = std::to_string(inode_);
     std::string path      = join_paths(mount_path_, inode_str);
 
-    // 1) wrap the fd in a unique_ptr<FilePointer>
     auto self = shared_from_this();                
     auto fp = std::make_unique<FilePointer>(self);
     fp->open(path, flags);
@@ -108,16 +90,20 @@ Status FileHandle::close(FilePointer *fp) {
     fp->close();
     file_pointers_.erase(it);
 
-    if (cached_ && file_pointers_.empty()) {
-        flush();
-        uncache();
+    if (written_ && fetched_ && file_pointers_.empty()) {
+        Status s = flush();
+        if (!s.ok()) {
+            return s;
+        }
     }
 
-    return Status::OK();
-}
+    if (!cached_ && fetched_ && file_pointers_.empty()) {
+        Status s = remove_local();
+        if (!s.ok()) {
+            return s;
+        }
+    }
 
-Status FileHandle::unlink() {
-    unlink_ = true;
     return Status::OK();
 }
 
@@ -149,12 +135,9 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
         return Status::IOError("fstat failed: " + std::string(strerror(errno)));
     }
 
-    auto [s, attr] = metadata_->getattr(inode_);
-    if (!s.ok()) {
-        return s;
-    }
-    attr.set_size(st.st_size);
-    metadata_->setattr(attr);
+    attributes_.set_size(st.st_size);
+
+    written_ = true;
     
     return Status::OK();
 }
@@ -201,6 +184,54 @@ Status FileHandle::sync() {
     return Status::OK();
 }
 
+Status FileHandle::setattr(Attributes &attr) {
+    if (cached_) {
+        // Update the local attributes
+        attributes_.CopyFrom(attr);
+        return Status::OK();
+    } else {
+        // Update the file attributes in the metadata service.
+        auto s = metadata_->setattr(attr);
+        if (!s.ok()) {
+            return s;
+        }
+    }
+    return Status::OK();
+}
+
+void FileHandle::cache() {
+    if (cached_) {
+        // If the file is already cached, no need to cache again
+        return;
+    }
+
+    if (!fetched_) {
+        // If the file is not fetched, we need to fetch it first
+        Status s = fetch();
+        if (!s.ok()) {
+            return;
+        }
+    }
+
+    cached_ = true;
+};
+
+void FileHandle::uncache() {
+    if (!cached_) {
+        return; // Already uncached
+    }
+
+    if (fetched_ && file_pointers_.empty()) {
+        // If the file is fetched and there are no open file pointers, remove it
+        Status s = remove_local();
+        if (!s.ok()) {
+        }
+    }
+
+    cached_ = false;
+};
+
+
 Status FileHandle::flush() {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
@@ -244,7 +275,6 @@ Status FileHandle::flush() {
     data.set_payload(buffer);
     data.set_len(filesize);
 
-    // ERROR: A MERDA ESTA AQUI
     auto [s, bytes_written] =
         storage_->write(chunk_nodes, parity_nodes, file_id, data);
     if (!s.ok()) {
@@ -262,10 +292,19 @@ Status FileHandle::flush() {
 
     ::close(fd);
 
+    written_ = false;
+
     return Status::OK();
 }
 
-Status FileHandle::cache() {
+Status FileHandle::fetch() {
+    // get the cache attributes from the metadata service
+    auto [s, attr] = metadata_->getattr(inode_);
+    if (!s.ok()) {
+        return s;
+    }
+    attributes_ = attr;
+
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     int fd = ::open(path.c_str(), O_RDWR | O_CREAT);
@@ -274,68 +313,71 @@ Status FileHandle::cache() {
                                 std::string(strerror(errno)));
     }
 
-    // Retrieve the file from remote storage
-    std::vector<std::string> chunk_nodes{
-        "node1",
-        "node2",
-        "node3",
-        "node4",
-    };
+    if (attributes_.size() > 0) {
+        // Only fetch the file if it has a size greater than 0
 
-    std::vector<std::string> parity_nodes{
-        "node5",
-        "node6",
-    };
+        // Retrieve the file from remote storage
+        std::vector<std::string> chunk_nodes{
+            "node1",
+            "node2",
+            "node3",
+            "node4",
+        };
 
+        std::vector<std::string> parity_nodes{
+            "node5",
+            "node6",
+        };
 
-    std::string file_id = std::to_string(inode_);
-    auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
+        std::string file_id = std::to_string(inode_);
+        auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
 
-    ssize_t written = ::write(fd, data.payload().c_str(), data.len());
-    if (written < 0 || static_cast<size_t>(written) != data.len()) {
-        return Status::IOError(
-            "Failed to write remote data to local file: " +
-            std::string(strerror(errno)));
+        ssize_t written = ::write(fd, data.payload().c_str(), data.len());
+        if (written < 0 || static_cast<size_t>(written) != data.len()) {
+            return Status::IOError(
+                "Failed to write remote data to local file: " +
+                std::string(strerror(errno)));
+        }
     }
 
     ::close(fd); // Close the file descriptor after writing
 
 
-    // get the cache attributes from the metadata service
-    auto [s, attr] = metadata_->getattr(inode_);
-    if (!s.ok()) {
-        return s;
-    }
-    attributes_ = attr;
-
-    cached_ = true; // Mark as cached
+    fetched_ = true;
 
     return Status::OK();
 }
 
-Status FileHandle::uncache() {
+Status FileHandle::remove_local() {
     std::string inode_str = std::to_string(inode_);
     std::string path = join_paths(mount_path_, inode_str);
     if (::unlink(path.c_str()) == -1) {
         return Status::IOError("Failed to unlink file: " +
                                std::string(strerror(errno)));
     }
-
-    cached_ = false; // Mark as uncached
+    fetched_ = false;
     return Status::OK();
 }
 
-Status FileHandle::setattr(Attributes &attr) {
-    if (cached_) {
-        // Update the local attributes
-        attributes_.CopyFrom(attr);
-        return Status::OK();
-    } else {
-        // Update the file attributes in the metadata service.
-        auto s = metadata_->setattr(attr);
-        if (!s.ok()) {
-            return s;
-        }
-    }
-    return Status::OK();
+void FileHandle::stat_to_attr(const struct stat &st, Attributes &a) {
+    a.set_inode(inode_);
+    a.set_path(logic_path_);
+    a.set_mode(st.st_mode);
+    a.set_size(st.st_size);
+    a.set_access_time(st.st_atime);
+    a.set_modification_time(st.st_mtime);
+    a.set_creation_time(st.st_ctime);
+    a.set_user_id(st.st_uid);
+    a.set_group_id(st.st_gid);
+}
+
+// Convert our Attributes proto → POSIX stat buffer
+void FileHandle::attr_to_stat(const Attributes &a, struct stat *st) {
+    st->st_mode = a.mode();
+    st->st_size = a.size();
+    st->st_atime = a.access_time();
+    st->st_mtime = a.modification_time();
+    st->st_ctime = a.creation_time();
+    st->st_uid  = a.user_id();
+    st->st_gid  = a.group_id();
 }

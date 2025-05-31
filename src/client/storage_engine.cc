@@ -20,7 +20,6 @@ Status StorageEngine::init() {
 
 Status StorageEngine::open(const std::string &path, int flags, 
                            FilePointer **out_fp) {
-
     auto [s, fh] = find_file(path);
     if (!fh) {
         return Status::NotFound("File not found");
@@ -29,6 +28,7 @@ Status StorageEngine::open(const std::string &path, int flags,
     if (!s.ok()) {
         return s;
     }
+
     return Status::OK();
 }
 
@@ -103,10 +103,13 @@ Status StorageEngine::unlink(const std::string path) {
 Status StorageEngine::read(FilePointer *fp, Slice result, size_t size,
                            off_t offset) {
     std::shared_ptr<FileHandle> fh = fp->fh;
+
     Status s = fh->read(fp, result, size, offset);
     if (!s.ok()) {
         return s;
     }
+
+    cache_.insert(fh->get_inode(), fh);
 
     return Status::OK();
 }
