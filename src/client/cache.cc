@@ -2,13 +2,18 @@
 #include "eviction_policy.h"
 #include "file_handle.h"
 #include <memory>
+#include <gflags/gflags.h>
+
+DEFINE_int32(cache_size, 0, "Size of the cache in number of entries");
 
 Cache::Cache(std::unique_ptr<IEvictionPolicy> policy) {
-    capacity_ = 0;
+    capacity_ = FLAGS_cache_size;
     policy_ = std::move(policy);
 }
 
 std::shared_ptr<FileHandle> Cache::lookup(const uint64_t &inode) {
+    std::shared_lock lk(mu_);
+
     auto it = index_.find(inode);
     if (it == index_.end()) {
         return nullptr;
@@ -18,6 +23,8 @@ std::shared_ptr<FileHandle> Cache::lookup(const uint64_t &inode) {
 }
 
 void Cache::insert(const uint64_t &inode, std::shared_ptr<FileHandle> value) {
+    std::unique_lock lk(mu_);
+
     if (index_.size() == capacity_) {
         uint64_t evict_key = policy_->evict();
         if (evict_key != static_cast<uint64_t>(-1)) {

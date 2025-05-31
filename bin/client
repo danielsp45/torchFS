@@ -9,6 +9,7 @@ cd "${BASE_DIR}/.." || exit 127
 # Default values for directories.
 mount_dir="/mnt/fs"
 cache_dir="/home/vagrant/server"
+cache_size=0
 
 function display_help() {
   cat <<EOF
@@ -33,6 +34,10 @@ while [[ $# -gt 0 ]]; do
       cache_dir="${1#*=}"
       shift
       ;;
+    --cache_size=*)
+      cache_size="${1#*=}"
+      shift
+      ;;
     -h|--help)
       display_help
       exit 0
@@ -45,7 +50,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Running TorchFuse with mount_dir=${mount_dir} and cache_dir=${cache_dir}..."
+echo "Running TorchFuse with mount_dir=${mount_dir}, cache_size=${cache_size} and cache_dir=${cache_dir} ..."
 
 # Execute the project using sudo, calling the binary from the /build directory.
-sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f
+# sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f
+
+sudo ./build/torchfs \
+   --cache_dir="${cache_dir}" \
+   --cache_size="${cache_size}" \
+   "${mount_dir}" \
+   -- \
+   -omodules="subdir,subdir=${cache_dir}" \
+   -oallow_other -f

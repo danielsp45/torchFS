@@ -1,10 +1,15 @@
 #include "storage_engine.h"
 #include "torch_fuse.h"
+#include <gflags/gflags.h>
+
+DEFINE_string(cache_dir, "", "Directory for local storage");
 
 int main(int argc, char *argv[]) {
     enum { MAX_ARGS = 10 };
     int i, new_argc;
     char *new_argv[MAX_ARGS];
+
+    gflags::ParseCommandLineFlags(&argc, &argv, /*remove_flags=*/true);
 
     umask(0);
     for (i = 0, new_argc = 0; (i < argc) && (new_argc < MAX_ARGS); i++) {
@@ -15,8 +20,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    std::string local_path = "/home/vagrant/server";
-    StorageEngine *se = new StorageEngine(local_path);
+    StorageEngine *se = new StorageEngine(FLAGS_cache_dir);
     Status s = se->init();
     if (!s.ok()) {
         std::cerr << "Failed to initialize storage engine: " << s.ToString()
