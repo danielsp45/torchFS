@@ -48,6 +48,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     }
     void set_parent_inode(const uint64_t &p_inode) { p_inode_ = p_inode; }
     bool is_unlinked() const { return unlink_ && file_pointers_.empty(); }
+    bool is_cached() const { return cached_; }
 
     void unlink() {unlink_ = true;};
 

@@ -45,3 +45,7 @@ void Cache::insert(const uint64_t &inode, std::shared_ptr<FileHandle> value) {
         value->cache(); // Mark the file handle as cached
     }
 }
+
+int Cache::capacity() const {
+    return capacity_;
+}

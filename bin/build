@@ -31,7 +31,7 @@ fi
 
 cd "${BUILD_DIR}" || exit 127
 
-VCPKG_TOOLCHAIN_FILE="/home/vagrant/vcpkg/scripts/buildsystems/vcpkg.cmake"
+VCPKG_TOOLCHAIN_FILE="/home/gsd/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
 echo "Running cmake with vcpkg: cmake -DCMAKE_TOOLCHAIN_FILE=${VCPKG_TOOLCHAIN_FILE} -DVCPKG_MANIFEST_MODE=enabled .."
 cmake -DCMAKE_TOOLCHAIN_FILE="${VCPKG_TOOLCHAIN_FILE}" -DVCPKG_MANIFEST_MODE=enabled .. || { echo "cmake configuration failed"; exit 1; }

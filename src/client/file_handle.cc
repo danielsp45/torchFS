@@ -214,6 +214,7 @@ Status FileHandle::sync() {
 
 void FileHandle::cache() {
     std::unique_lock lk(mu_);
+    std::cout << "CACHING" << std::endl;
 
     if (cached_) {
         // If the file is already cached, no need to cache again
@@ -233,6 +234,7 @@ void FileHandle::cache() {
 
 void FileHandle::uncache() {
     std::unique_lock lk(mu_);
+    std::cout << "UNCACHING" << std::endl;
 
     if (!cached_) {
         return; // Already uncached
