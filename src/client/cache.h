@@ -1,7 +1,8 @@
 #pragma once
-#include <string>
 #include <unordered_map>
 #include <memory>
+#include <shared_mutex>   // for std::shared_mutex, std::shared_lock, etc.
+
 #include "file_handle.h"
 
 class IEvictionPolicy;
@@ -13,6 +14,8 @@ class Cache {
         void insert(const uint64_t &inode, std::shared_ptr<FileHandle> value);
 
     private:
+        mutable std::shared_mutex mu_;
+
         size_t capacity_;
         std::unordered_map<uint64_t, std::shared_ptr<FileHandle>> index_;
         std::unique_ptr<IEvictionPolicy> policy_;

@@ -5,6 +5,7 @@
 
 #include <fcntl.h>
 #include <iostream>
+#include <ostream>
 #include <sys/types.h>
 
 // Removed static for external linkage.
@@ -129,7 +130,6 @@ int torch_create(const char *path, mode_t /*mode*/, struct fuse_file_info *fi) {
 
 int torch_open(const char *path, struct fuse_file_info *fi) {
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
-
     FilePointer *fp = nullptr;
     Status s = se->open(se->get_logic_path(path), fi->flags, &fp);
     if (!s.ok()) {
@@ -150,7 +150,6 @@ int torch_open(const char *path, struct fuse_file_info *fi) {
 // Removed static for external linkage.
 int torch_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
 
@@ -217,14 +216,22 @@ int torch_release(const char *path, struct fuse_file_info *fi) {
         return -errno;
     }
 
+    fi->fh = 0; // Reset file handle
+
     return 0;
 }
 
 // Removed static for external linkage.
-// TODO: implement fsync with cache
 int torch_fsync(const char *path, int /*isdatasync*/,
                 struct fuse_file_info *fi) {
     (void)fi;
+    auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
+    std::string logic_path = se->get_logic_path(path);
+    Status s = se->sync(logic_path);
+    if (!s.ok()) {
+        std::cerr << "Error syncing file: " << s.ToString() << std::endl;
+        return -errno;
+    }
 
     return 0;
 }
@@ -241,4 +248,25 @@ int torch_utimens(const char *path, const struct timespec tv[2],
     }
 
     return 0;
+}
+
+off_t torch_lseek(const char *path, off_t offset, int whence,
+                struct fuse_file_info *fi) {
+    auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
+    std::string logic_path = se->get_logic_path(path);
+
+    FilePointer *fp;
+	if(fi == NULL) {
+        se->open(logic_path, fi->flags, &fp);
+    } else {
+        fp = reinterpret_cast<FilePointer *>(fi->fh);
+    }
+
+    off_t new_offset;
+    Status s = se->lseek(fp, offset, whence, &new_offset);
+
+    if (fi == NULL)
+        se->close(fp);
+
+    return new_offset;
 }

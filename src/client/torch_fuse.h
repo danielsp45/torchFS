@@ -27,6 +27,8 @@ int torch_release(const char *path, struct fuse_file_info *fi);
 int torch_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 int torch_utimens(const char *path, const struct timespec tv[2],
                   struct fuse_file_info *fi);
+off_t torch_lseek(const char *path, off_t offset, int whence,
+                  struct fuse_file_info *fi);
 
 static const struct fuse_operations torch_oper = {.getattr = torch_getattr,
                                                   .readlink = NULL,
@@ -69,5 +71,5 @@ static const struct fuse_operations torch_oper = {.getattr = torch_getattr,
                                                   .flock = NULL,
                                                   .fallocate = NULL,
                                                   .copy_file_range = NULL,
-                                                  .lseek = NULL};
+                                                  .lseek = torch_lseek};
 #endif // TORCH_FUSE_H

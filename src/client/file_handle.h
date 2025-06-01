@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <shared_mutex>
 
 struct FilePointer;
 
@@ -36,6 +37,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     Status write(FilePointer *fp, Slice &src, size_t count, off_t offset);
     Status getattr(struct stat *buf);
     Status utimens(const struct timespec tv[2]);
+    Status lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset);
     Status sync();
 
     std::string get_logic_path() { return logic_path_; }
@@ -53,6 +55,9 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     void uncache();
 
   private:
+    // Protects attributes_, file_pointers_, fetched_, written_, etc.
+    mutable std::shared_mutex mu_;
+
     uint64_t p_inode_;       // Parent inode
     uint64_t inode_;         // Unique identifier for the file
     std::string logic_path_; // Logical path of the file
@@ -71,9 +76,8 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     Status fetch();
     Status remove_local();
 
-
-  void stat_to_attr(const struct stat &st, Attributes &a);
-  void attr_to_stat(const Attributes &a, struct stat *st);
+    void stat_to_attr(const struct stat &st, Attributes &a);
+    void attr_to_stat(const Attributes &a, struct stat *st);
 };
 
 struct FilePointer {
@@ -133,6 +137,19 @@ struct FilePointer {
       }
 
       return ::fstat(fd, buf);
+    }
+
+    off_t lseek(off_t offset, int whence) {
+      if (fd < 0) {
+        return -1; // Invalid file descriptor
+      }
+
+      off_t new_offset = ::lseek(fd, offset, whence);
+      if (new_offset < 0) {
+        return -1; // Seek error
+      }
+
+      return new_offset;
     }
 };
 #endif // FILE_HANDLE_H

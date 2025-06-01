@@ -12,14 +12,16 @@ Options:
   --conf=<conf>     Initial configuration of the replication group 
                     (e.g. "127.0.0.1:8000,127.0.0.1:9000")
   --path=<path>     Path to the metadata server storage (default: /tmp/metadata)
+  --host=<host>     Host address for the metadata server (default:
   -h, --help        Show this help message.
 EOF
 }
 
 # Default values
 port=8000
-conf=""
+conf="127.0.1.1:8000:0"
 path="/tmp/metadata"
+host="127.0.2.1"
 
 # Parse command-line options
 while [[ $# -gt 0 ]]; do
@@ -34,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --path=*)
       path="${1#*=}"
+      shift
+      ;;
+    --host=*)
+      host="${1#*=}"
       shift
       ;;
     -h|--help)
@@ -56,4 +62,4 @@ BASE_DIR="$(dirname "${BASH_SOURCE[0]}")"
 cd "${BASE_DIR}/.." || exit 127
 
 # Launch the metadata server binary with the provided flags.
-./build/metadata -port "${port}" -conf "${conf}" --path "${path}"
+./build/metadata -port "${port}" -conf "${conf}" -path "${path}" -host "${host}"

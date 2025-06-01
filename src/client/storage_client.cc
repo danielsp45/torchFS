@@ -170,11 +170,12 @@ std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> 
     job.file_id      = file_id;
     job.data_payload = data;  // copy: Data holds payload + length
 
-    {
-        std::lock_guard<std::mutex> lk(queue_mutex_);
-        write_queue_.push(std::move(job));
-    }
-    queue_cv_.notify_one();
+    // {
+    //     std::lock_guard<std::mutex> lk(queue_mutex_);
+    //     write_queue_.push(std::move(job));
+    // }
+    // queue_cv_.notify_one();
+    process_write(job);
     // We don't know “bytes_written” yet, since the job runs in background.
     return { Status::OK(), 0ULL };
 }

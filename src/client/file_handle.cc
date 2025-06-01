@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -29,6 +30,8 @@ Status FileHandle::init() {
 }
 
 Status FileHandle::destroy() {
+    std::unique_lock lk(mu_);
+
     if (fetched_) {
         Status s = remove_local();
         if (!s.ok()) {
@@ -59,6 +62,8 @@ Status FileHandle::destroy() {
 }
 
 Status FileHandle::open(FilePointer **out_fp, int flags) {
+    std::unique_lock lk(mu_);
+
     if (!fetched_) {
         Status s = fetch();
         if (!s.ok()) {
@@ -79,6 +84,8 @@ Status FileHandle::open(FilePointer **out_fp, int flags) {
 }
 
 Status FileHandle::close(FilePointer *fp) {
+    std::unique_lock lk(mu_);
+
     auto it = std::find_if(file_pointers_.begin(), file_pointers_.end(),
                            [fp](const std::unique_ptr<FilePointer> &p) {
                                return p.get() == fp;
@@ -108,6 +115,8 @@ Status FileHandle::close(FilePointer *fp) {
 }
 
 Status FileHandle::read(FilePointer *fp, Slice &dst, size_t size, off_t offset) {
+    std::shared_lock lk(mu_);
+
     ssize_t bytes_read = fp->read(dst, size, offset);
     if (bytes_read < 0) {
         return Status::IOError("Failed to read file: " +
@@ -118,6 +127,8 @@ Status FileHandle::read(FilePointer *fp, Slice &dst, size_t size, off_t offset) 
 }
 
 Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset) {
+    std::unique_lock lk(mu_);
+
     // Write the data to the local file
     ssize_t written = fp->write(src, count, offset);
 
@@ -136,14 +147,15 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
     }
 
     attributes_.set_size(st.st_size);
-
     written_ = true;
     
     return Status::OK();
 }
 
 Status FileHandle::getattr(struct stat *buf) {
-    if (cached_) {
+    std::shared_lock lk(mu_);
+
+    if (fetched_) {
         attr_to_stat(attributes_, buf);
     } else {
         auto [s, attr] = metadata_->getattr(inode_);
@@ -157,19 +169,36 @@ Status FileHandle::getattr(struct stat *buf) {
 }
 
 Status FileHandle::utimens(const struct timespec tv[2]) {
-    if (cached_) {
+    std::unique_lock lk(mu_);
+
+    if (fetched_) {
         attributes_.set_access_time(tv[0].tv_sec);
         attributes_.set_modification_time(tv[1].tv_sec);
     } else {
         // Update the file attributes in the metadata service
         auto [s, attr] = metadata_->getattr(inode_);
+        if (!s.ok()) {
+            return s;
+        }
         attr.set_access_time(tv[0].tv_sec);
         attr.set_modification_time(tv[1].tv_sec);
 
-        s = setattr(attr);
+        s = metadata_->setattr(attr);
+        if (!s.ok()) {
+            return s;
+        }
+
+        attributes_ = attr;
     }
 
     return Status::OK();
+}
+
+Status FileHandle::lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset) {
+    std::shared_lock lk(mu_);
+    off_t pos = fp->lseek(offset, whence);
+    *new_offset = pos;
+    return Status::OK(); 
 }
 
 Status FileHandle::sync() {
@@ -180,26 +209,12 @@ Status FileHandle::sync() {
     if (::fsync(::open(path.c_str(), O_RDWR)) == -1) {
         return Status::IOError("fsync failed: " + std::string(strerror(errno)));
     }
-
-    return Status::OK();
-}
-
-Status FileHandle::setattr(Attributes &attr) {
-    if (cached_) {
-        // Update the local attributes
-        attributes_.CopyFrom(attr);
-        return Status::OK();
-    } else {
-        // Update the file attributes in the metadata service.
-        auto s = metadata_->setattr(attr);
-        if (!s.ok()) {
-            return s;
-        }
-    }
     return Status::OK();
 }
 
 void FileHandle::cache() {
+    std::unique_lock lk(mu_);
+
     if (cached_) {
         // If the file is already cached, no need to cache again
         return;
@@ -217,6 +232,8 @@ void FileHandle::cache() {
 };
 
 void FileHandle::uncache() {
+    std::unique_lock lk(mu_);
+
     if (!cached_) {
         return; // Already uncached
     }
@@ -281,13 +298,9 @@ Status FileHandle::flush() {
         return s;
     }
 
-    // Update metadata attributes based on local filesystem.
-    Attributes attr;
-    stat_to_attr(st, attr);
-
-    Status meta_status = setattr(attr);
-    if (!meta_status.ok()) {
-        return meta_status;
+    auto meta_s = metadata_->setattr(attributes_);
+    if (!meta_s.ok()) {
+        return s;
     }
 
     ::close(fd);
@@ -331,7 +344,6 @@ Status FileHandle::fetch() {
 
         std::string file_id = std::to_string(inode_);
         auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
-
         ssize_t written = ::write(fd, data.payload().c_str(), data.len());
         if (written < 0 || static_cast<size_t>(written) != data.len()) {
             return Status::IOError(

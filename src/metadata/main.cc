@@ -9,7 +9,7 @@
 #include <brpc/controller.h>
 #include <brpc/server.h>
 #include <butil/at_exit.h>
-#include <gflags/gflags.h> // DEFINE_*
+#include <gflags/gflags.h>
 #include <string>
 #include <unistd.h>
 
@@ -17,6 +17,7 @@
 DEFINE_int32(port, 8000, "Listen port of this peer");
 DEFINE_string(conf, "", "Initial configuration of the replication group");
 DEFINE_string(path, "", "Path to metadata storage");
+DEFINE_string(host, "127.0.1.1", "Host address for the metadata service");
 
 int main(int argc, char *argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -48,7 +49,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Bind to all interfaces so the service is reachable externally.
-    std::string server_address = "127.0.2.1:" + std::to_string(FLAGS_port);
+    std::string server_address = FLAGS_host + ":" + std::to_string(FLAGS_port);
     brpc::ServerOptions options;
     if (server.Start(server_address.c_str(), &options) != 0) {
         LOG(ERROR) << "Failed to start RPC server";

@@ -9,8 +9,10 @@ void StorageServiceImpl::read_chunk(
 ) {
     std::cout << "[readfile] Request received for ID: " << request->chunk_id() << std::endl;
     brpc::ClosureGuard done_guard(done);
+    std::cout << "INSIDE READ CHUNK" << std::endl;
     auto [st, data] = backend_.read_chunk(request->chunk_id());
     if (!st.ok()) {
+        std::cerr << "Error reading chunk: " << st.ToString() << std::endl;
         static_cast<brpc::Controller *>(cntl)->SetFailed(st.ToString());
         return;
     }
@@ -28,6 +30,7 @@ void StorageServiceImpl::write_chunk(
     brpc::ClosureGuard done_guard(done);
     auto [st, bytes_written] = backend_.write_chunk(request->chunk_id(), request->data());
     if (!st.ok()) {
+        std::cerr << "Error writing chunk: " << st.ToString() << std::endl;
         static_cast<brpc::Controller *>(cntl)->SetFailed(st.ToString());
         return;
     }
