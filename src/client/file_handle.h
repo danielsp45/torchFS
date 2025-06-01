@@ -37,6 +37,7 @@ class FileHandle : public std::enable_shared_from_this<FileHandle> {
     Status write(FilePointer *fp, Slice &src, size_t count, off_t offset);
     Status getattr(struct stat *buf);
     Status utimens(const struct timespec tv[2]);
+    Status lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset);
     Status sync();
 
     std::string get_logic_path() { return logic_path_; }
@@ -136,6 +137,19 @@ struct FilePointer {
       }
 
       return ::fstat(fd, buf);
+    }
+
+    off_t lseek(off_t offset, int whence) {
+      if (fd < 0) {
+        return -1; // Invalid file descriptor
+      }
+
+      off_t new_offset = ::lseek(fd, offset, whence);
+      if (new_offset < 0) {
+        return -1; // Seek error
+      }
+
+      return new_offset;
     }
 };
 #endif // FILE_HANDLE_H

@@ -19,7 +19,7 @@ EOF
 
 # Default values
 port=8000
-conf=""
+conf="127.0.1.1:8000:0"
 path="/tmp/metadata"
 host="127.0.2.1"
 

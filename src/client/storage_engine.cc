@@ -300,6 +300,11 @@ Status StorageEngine::utimens(const std::string &path,
     return Status::NotFound("File or directory not found");
 }
 
+Status StorageEngine::lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset) {
+    std::shared_ptr<FileHandle> fh = fp->fh;
+    return fh->lseek(fp, offset, whence, new_offset);
+}
+
 std::string StorageEngine::get_logic_path(const std::string &path) {
     if (path == mount_path_) {
         return "/";

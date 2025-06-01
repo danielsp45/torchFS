@@ -147,7 +147,6 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
     }
 
     attributes_.set_size(st.st_size);
-
     written_ = true;
     
     return Status::OK();
@@ -156,9 +155,11 @@ Status FileHandle::write(FilePointer *fp, Slice &src, size_t count, off_t offset
 Status FileHandle::getattr(struct stat *buf) {
     std::shared_lock lk(mu_);
 
-    if (cached_) {
+    if (fetched_) {
+        std::cout << "Fetching from local" << std::endl;
         attr_to_stat(attributes_, buf);
     } else {
+        std::cout << "Fetching from remote" << std::endl;
         auto [s, attr] = metadata_->getattr(inode_);
         if (!s.ok()) {
             return s;
@@ -172,19 +173,34 @@ Status FileHandle::getattr(struct stat *buf) {
 Status FileHandle::utimens(const struct timespec tv[2]) {
     std::unique_lock lk(mu_);
 
-    if (cached_) {
+    if (fetched_) {
         attributes_.set_access_time(tv[0].tv_sec);
         attributes_.set_modification_time(tv[1].tv_sec);
     } else {
         // Update the file attributes in the metadata service
         auto [s, attr] = metadata_->getattr(inode_);
+        if (!s.ok()) {
+            return s;
+        }
         attr.set_access_time(tv[0].tv_sec);
         attr.set_modification_time(tv[1].tv_sec);
 
-        s = setattr(attr);
+        s = metadata_->setattr(attr);
+        if (!s.ok()) {
+            return s;
+        }
+
+        attributes_ = attr;
     }
 
     return Status::OK();
+}
+
+Status FileHandle::lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset) {
+    std::shared_lock lk(mu_);
+    off_t pos = fp->lseek(offset, whence);
+    *new_offset = pos;
+    return Status::OK(); 
 }
 
 Status FileHandle::sync() {
@@ -194,22 +210,6 @@ Status FileHandle::sync() {
 
     if (::fsync(::open(path.c_str(), O_RDWR)) == -1) {
         return Status::IOError("fsync failed: " + std::string(strerror(errno)));
-    }
-
-    return Status::OK();
-}
-
-Status FileHandle::setattr(Attributes &attr) {
-    if (cached_) {
-        // Update the local attributes
-        attributes_.CopyFrom(attr);
-        return Status::OK();
-    } else {
-        // Update the file attributes in the metadata service.
-        auto s = metadata_->setattr(attr);
-        if (!s.ok()) {
-            return s;
-        }
     }
     return Status::OK();
 }
@@ -293,6 +293,7 @@ Status FileHandle::flush() {
     Data data;
     data.set_payload(buffer);
     data.set_len(filesize);
+    std::cout << "FLUSH PAYLOAD SIZE: " << data.len() << std::endl;
 
     auto [s, bytes_written] =
         storage_->write(chunk_nodes, parity_nodes, file_id, data);
@@ -300,13 +301,9 @@ Status FileHandle::flush() {
         return s;
     }
 
-    // Update metadata attributes based on local filesystem.
-    Attributes attr;
-    stat_to_attr(st, attr);
-
-    Status meta_status = setattr(attr);
-    if (!meta_status.ok()) {
-        return meta_status;
+    auto meta_s = metadata_->setattr(attributes_);
+    if (!meta_s.ok()) {
+        return s;
     }
 
     ::close(fd);
@@ -350,13 +347,14 @@ Status FileHandle::fetch() {
 
         std::string file_id = std::to_string(inode_);
         auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
-
+        std::cout << "FETCH PAYLOAD SIZE: " << data.len() << std::endl;
         ssize_t written = ::write(fd, data.payload().c_str(), data.len());
         if (written < 0 || static_cast<size_t>(written) != data.len()) {
             return Status::IOError(
                 "Failed to write remote data to local file: " +
                 std::string(strerror(errno)));
         }
+        std::cout << "Wrote " << written << " bytes to local file." << std::endl;
     }
 
     ::close(fd); // Close the file descriptor after writing

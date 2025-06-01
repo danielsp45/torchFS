@@ -41,10 +41,10 @@ StorageBackend::read_chunk(const std::string &chunk_id) {
                 result};
     }
 
-    if (!result.ParseFromString(buf)) {
-        return {Status::IOError("Failed to parse Data protobuf from: " + path),
-                result};
-    }
+    std::cout << "READ " << bytes_read << " bytes from chunk: " << chunk_id
+              << std::endl;
+    result.set_payload(buf);
+    result.set_len(static_cast<size_t>(bytes_read));
 
     return {Status::OK(), result};
 }
@@ -59,17 +59,13 @@ StorageBackend::write_chunk(const std::string &chunk_id, const Data &data) {
                 0};
     }
 
-    std::string serialized;
-    if (!data.SerializeToString(&serialized)) {
-        ::close(fd);
-        return {Status::IOError("Failed to serialize Data protobuf"), 0};
-    }
-
     ssize_t bytes_written =
-        ::pwrite(fd, serialized.data(), serialized.size(), 0);
+        ::pwrite(fd, data.payload().c_str(), data.len(), 0);
     ::close(fd);
 
-    if (bytes_written < 0) {
+    std::cout << "WROTE bytes: " << bytes_written << std::endl;
+
+    if (bytes_written != static_cast<ssize_t>(data.len())) {
         return {Status::IOError("Pwrite failed: " + path + " (" +
                                 strerror(errno) + ")"),
                 0};

@@ -38,6 +38,7 @@ class StorageEngine {
     Status mkdir(const std::string &path);
     Status rmdir(const std::string &path);
     Status utimens(const std::string &path, const struct timespec tv[2]);
+    Status lseek(FilePointer *fp, off_t offset, int whence, off_t *new_offset);
 
     std::string get_logic_path(const std::string &path);
 

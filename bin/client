@@ -56,6 +56,7 @@ echo "Running TorchFuse with mount_dir=${mount_dir}, cache_size=${cache_size} an
 # sudo ./build/torchfs "${mount_dir}" -omodules="subdir,subdir=${cache_dir}" -oallow_other -f
 
 sudo ./build/torchfs \
+   --max_body_size=99108864 \
    --cache_dir="${cache_dir}" \
    --cache_size="${cache_size}" \
    "${mount_dir}" \
