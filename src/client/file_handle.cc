@@ -156,10 +156,8 @@ Status FileHandle::getattr(struct stat *buf) {
     std::shared_lock lk(mu_);
 
     if (fetched_) {
-        std::cout << "Fetching from local" << std::endl;
         attr_to_stat(attributes_, buf);
     } else {
-        std::cout << "Fetching from remote" << std::endl;
         auto [s, attr] = metadata_->getattr(inode_);
         if (!s.ok()) {
             return s;
@@ -293,7 +291,6 @@ Status FileHandle::flush() {
     Data data;
     data.set_payload(buffer);
     data.set_len(filesize);
-    std::cout << "FLUSH PAYLOAD SIZE: " << data.len() << std::endl;
 
     auto [s, bytes_written] =
         storage_->write(chunk_nodes, parity_nodes, file_id, data);
@@ -347,14 +344,12 @@ Status FileHandle::fetch() {
 
         std::string file_id = std::to_string(inode_);
         auto [st, data] = storage_->read(chunk_nodes, parity_nodes, file_id);
-        std::cout << "FETCH PAYLOAD SIZE: " << data.len() << std::endl;
         ssize_t written = ::write(fd, data.payload().c_str(), data.len());
         if (written < 0 || static_cast<size_t>(written) != data.len()) {
             return Status::IOError(
                 "Failed to write remote data to local file: " +
                 std::string(strerror(errno)));
         }
-        std::cout << "Wrote " << written << " bytes to local file." << std::endl;
     }
 
     ::close(fd); // Close the file descriptor after writing

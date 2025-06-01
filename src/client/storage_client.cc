@@ -37,7 +37,7 @@ StorageClient::StorageClient() {
     };
 
     ec_descriptor_ = liberasurecode_instance_create(
-        EC_BACKEND_NULL, &args);
+        EC_BACKEND_LIBERASURECODE_RS_VAND, &args);
     if (!ec_descriptor_) {
         throw std::runtime_error("Failed to create erasure code instance\n");
     }
@@ -72,12 +72,9 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
     }
 
     // Read from data nodes
-    // std::vector<std::string> fragment_data;
-    std::string data;
-    // uint64_t frag_len = 0;
-    // for (const auto &node : data_nodes) {
-
-        auto node = data_nodes[0]; // For simplicity, just read from the first data node
+    std::vector<std::string> fragment_data;
+    uint64_t frag_len = 0;
+    for (const auto &node : data_nodes) {
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), Data()};
         }
@@ -92,75 +89,67 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
             std::cerr << "Failed to read from data node " << node << ": "
                       << cntl.ErrorText() << std::endl;
         } else {
-            data = resp.payload();
-            // fragment_data.push_back(resp.payload());
-            // if (frag_len == 0) {
-            //     frag_len = resp.len();
-            // } else {
-            //     assert(frag_len == resp.len());
-            // }
+            fragment_data.push_back(resp.payload());
+            if (frag_len == 0) {
+                frag_len = resp.len();
+            } else {
+                assert(frag_len == resp.len());
+            }
         }
-    // }
+    }
 
     // Read from parity nodes if needed
-    // for (size_t i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K; i++) {
-    //     const std::string &node = parity_nodes[i];
-    //     if (!nodes_.contains(node)) {
-    //         return {Status::IOError("Node not found: " + node), Data()};
-    //     }
+    for (size_t i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K; i++) {
+        const std::string &node = parity_nodes[i];
+        if (!nodes_.contains(node)) {
+            return {Status::IOError("Node not found: " + node), Data()};
+        }
 
-    //     ReadRequest req;
-    //     req.set_chunk_id(file_id);
-    //     Data resp;
-    //     brpc::Controller cntl;
+        ReadRequest req;
+        req.set_chunk_id(file_id);
+        Data resp;
+        brpc::Controller cntl;
 
-    //     nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
-    //     if (cntl.Failed()) {
-    //         std::cerr << "Failed to read from parity node " << node << ": "
-    //                   << cntl.ErrorText() << std::endl;
-    //     } else {
-    //         fragment_data.push_back(resp.payload());
-    //     }
-    // }
+        nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
+        if (cntl.Failed()) {
+            std::cerr << "Failed to read from parity node " << node << ": "
+                      << cntl.ErrorText() << std::endl;
+        } else {
+            fragment_data.push_back(resp.payload());
+        }
+    }
 
     // Check fragment count
-    // if (fragment_data.size() < EC_K) {
-    //     return {Status::IOError("Insufficient fragments for reconstruction"),
-    //             Data()};
-    // }
+    if (fragment_data.size() < EC_K) {
+        return {Status::IOError("Insufficient fragments for reconstruction"),
+                Data()};
+    }
 
-    // // Convert to pointer array to match liberasurecode API
-    // std::vector<char *> fragments;
-    // for (auto &frag : fragment_data) {
-    //     fragments.push_back(const_cast<char *>(frag.data()));
-    // }
+    // Convert to pointer array to match liberasurecode API
+    std::vector<char *> fragments;
+    for (auto &frag : fragment_data) {
+        fragments.push_back(const_cast<char *>(frag.data()));
+    }
 
-    // // Decode data
-    // char *decoded_data = nullptr;
-    // uint64_t decoded_len = 0;
+    // Decode data
+    char *decoded_data = nullptr;
+    uint64_t decoded_len = 0;
 
-    // int res = liberasurecode_decode(ec_descriptor_, fragments.data(), EC_K,
-    //                                 frag_len, 0, &decoded_data, &decoded_len);
+    int res = liberasurecode_decode(ec_descriptor_, fragments.data(), EC_K,
+                                    frag_len, 0, &decoded_data, &decoded_len);
 
-    // if (res != 0) {
-    //     return {Status::IOError("Decode failed: " + std::to_string(res)),
-    //             Data()};
-    // }
+    if (res != 0) {
+        return {Status::IOError("Decode failed: " + std::to_string(res)),
+                Data()};
+    }
 
     Data result;
-    // result.set_len(decoded_len);
-    // result.set_payload(std::string(decoded_data, decoded_len));
-    result.set_len(data.size());
-    result.set_payload(data);
+    result.set_len(decoded_len);
+    result.set_payload(std::string(decoded_data, decoded_len));
 
-    // res = liberasurecode_decode_cleanup(ec_descriptor_, decoded_data);
-    // if (res != 0) {
-    //     return {Status::IOError("Decode cleanup failed!"), Data()};
-    // }
-    // return {Status::OK(), result};
-
-    if (data.empty()) {
-        return {Status::IOError("No data read from nodes"), Data()};
+    res = liberasurecode_decode_cleanup(ec_descriptor_, decoded_data);
+    if (res != 0) {
+        return {Status::IOError("Decode cleanup failed!"), Data()};
     }
     return {Status::OK(), result};
 }
@@ -258,31 +247,27 @@ void StorageClient::process_write(const WriteJob &job) {
     char **parity_fragments = nullptr;
     uint64_t fragment_len   = 0;
 
-    // int r = liberasurecode_encode(ec_descriptor_,
-    //                               job.data_payload.payload().data(),
-    //                               job.data_payload.len(),
-    //                               &data_fragments,
-    //                               &parity_fragments,
-    //                               &fragment_len);
-    // if (r != 0) {
-    //     if (data_fragments)   liberasurecode_encode_cleanup(ec_descriptor_, data_fragments, nullptr);
-    //     if (parity_fragments) liberasurecode_encode_cleanup(ec_descriptor_, nullptr, parity_fragments);
-    //     return;
-    // }
+    int r = liberasurecode_encode(ec_descriptor_,
+                                  job.data_payload.payload().data(),
+                                  job.data_payload.len(),
+                                  &data_fragments,
+                                  &parity_fragments,
+                                  &fragment_len);
+    if (r != 0) {
+        if (data_fragments)   liberasurecode_encode_cleanup(ec_descriptor_, data_fragments, nullptr);
+        if (parity_fragments) liberasurecode_encode_cleanup(ec_descriptor_, nullptr, parity_fragments);
+        return;
+    }
 
     // 2) RPC to each data node
-    // for (int i = 0; i < EC_K; i++) {
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < EC_K; i++) {
         const std::string &node = job.data_nodes[i];
         if (!nodes_.count(node)) {
             continue;
         }
         Data node_data;
-        // node_data.set_len(fragment_len);
-        node_data.set_len(job.data_payload.len());
-        // node_data.set_payload(std::string(data_fragments[i], fragment_len));
-        // set the payuload the job.data_payload
-        node_data.set_payload(job.data_payload.payload());
+        node_data.set_len(fragment_len);
+        node_data.set_payload(std::string(data_fragments[i], fragment_len));
 
         WriteRequest req;
         req.set_chunk_id(job.file_id);
@@ -293,28 +278,28 @@ void StorageClient::process_write(const WriteJob &job) {
         nodes_.at(node)->stub->write_chunk(&cntl, &req, &resp, nullptr);
     }
 
-    // // 3) RPC to each parity node
-    // for (int i = 0; i < EC_M; i++) {
-    //     const std::string &node = job.parity_nodes[i];
-    //     if (!nodes_.count(node)) {
-    //         continue;
-    //     }
-    //     Data node_data;
-    //     node_data.set_len(fragment_len);
-    //     node_data.set_payload(std::string(parity_fragments[i], fragment_len));
+    // 3) RPC to each parity node
+    for (int i = 0; i < EC_M; i++) {
+        const std::string &node = job.parity_nodes[i];
+        if (!nodes_.count(node)) {
+            continue;
+        }
+        Data node_data;
+        node_data.set_len(fragment_len);
+        node_data.set_payload(std::string(parity_fragments[i], fragment_len));
 
-    //     WriteRequest req;
-    //     req.set_chunk_id(job.file_id);
-    //     *req.mutable_data() = node_data;
+        WriteRequest req;
+        req.set_chunk_id(job.file_id);
+        *req.mutable_data() = node_data;
 
-    //     WriteResponse resp;
-    //     brpc::Controller cntl;
-    //     nodes_.at(node)->stub->write_chunk(&cntl, &req, &resp, nullptr);
-    // }
+        WriteResponse resp;
+        brpc::Controller cntl;
+        nodes_.at(node)->stub->write_chunk(&cntl, &req, &resp, nullptr);
+    }
 
-    // // 4) Cleanup erasure buffers
-    // r = liberasurecode_encode_cleanup(ec_descriptor_,
-    //                                   data_fragments,
-    //                                   parity_fragments);
+    // 4) Cleanup erasure buffers
+    r = liberasurecode_encode_cleanup(ec_descriptor_,
+                                      data_fragments,
+                                      parity_fragments);
 }
 

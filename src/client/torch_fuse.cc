@@ -130,7 +130,6 @@ int torch_create(const char *path, mode_t /*mode*/, struct fuse_file_info *fi) {
 
 int torch_open(const char *path, struct fuse_file_info *fi) {
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
-    std::cout << "TORCH_OPEN" << std::endl;
     FilePointer *fp = nullptr;
     Status s = se->open(se->get_logic_path(path), fi->flags, &fp);
     if (!s.ok()) {
@@ -151,7 +150,6 @@ int torch_open(const char *path, struct fuse_file_info *fi) {
 // Removed static for external linkage.
 int torch_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-    std::cout << "READ OP" << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
 
@@ -226,7 +224,6 @@ int torch_release(const char *path, struct fuse_file_info *fi) {
 // Removed static for external linkage.
 int torch_fsync(const char *path, int /*isdatasync*/,
                 struct fuse_file_info *fi) {
-    std::cout << "FSYNC: " << path << std::endl;
     (void)fi;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
@@ -255,7 +252,6 @@ int torch_utimens(const char *path, const struct timespec tv[2],
 
 off_t torch_lseek(const char *path, off_t offset, int whence,
                 struct fuse_file_info *fi) {
-    std::cerr << "LSEEK: " << path << std::endl;
     auto se = static_cast<StorageEngine *>(fuse_get_context()->private_data);
     std::string logic_path = se->get_logic_path(path);
 
