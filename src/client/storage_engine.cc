@@ -5,7 +5,7 @@
 #include "status.h"
 
 #include <dirent.h>
-#include <fcntl.h> // For O_CREAT and file mode flags
+#include <fcntl.h>
 #include <memory>
 
 Status StorageEngine::init() {
@@ -29,6 +29,13 @@ Status StorageEngine::open(const std::string &path, int flags,
     s = fh->open(out_fp, flags);
     if (!s.ok()) {
         return s;
+    }
+
+    if (!(flags & O_WRONLY || flags & O_RDWR)) {
+        if (!fh->is_cached()) {
+            cache_.insert(fh->get_inode(), fh);
+            prefetch(fh, cache_.capacity());
+        }
     }
 
     return Status::OK();
@@ -109,11 +116,6 @@ Status StorageEngine::read(FilePointer *fp, Slice result, size_t size,
     Status s = fh->read(fp, result, size, offset);
     if (!s.ok()) {
         return s;
-    }
-
-    if (!fh->is_cached()) {
-        cache_.insert(fh->get_inode(), fh);
-        prefetch(fh, cache_.capacity());
     }
 
     return Status::OK();
