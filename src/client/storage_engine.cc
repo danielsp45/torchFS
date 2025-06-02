@@ -15,6 +15,8 @@ Status StorageEngine::init() {
         return s;
     }
 
+    start_prefetcher();
+
     return Status::OK();
 }
 
@@ -109,7 +111,10 @@ Status StorageEngine::read(FilePointer *fp, Slice result, size_t size,
         return s;
     }
 
-    cache_.insert(fh->get_inode(), fh);
+    if (!fh->is_cached()) {
+        cache_.insert(fh->get_inode(), fh);
+        prefetch(fh, cache_.capacity());
+    }
 
     return Status::OK();
 }
@@ -388,4 +393,76 @@ StorageEngine::find_dir(const std::string &path) {
     }
 
     return {Status::OK(), nullptr};
+}
+
+void StorageEngine::prefetch(std::shared_ptr<FileHandle> fh, int n) {
+    if (!fh || n <= 0) return;
+    {
+        std::lock_guard<std::mutex> lk(prefetch_mutex_);
+        // Optionally: you could push a small struct {fh, n} instead of just fh,
+        // if you need to remember how many to prefetch. For brevity, this example
+        // just assumes a fixed “n” captured in a lambda or stored elsewhere.
+        prefetch_queue_.push_back(fh);
+    }
+    prefetch_cv_.notify_one();
+}
+
+// The worker loop: wait for new jobs, then process
+void StorageEngine::prefetch_loop() {
+    while (true) {
+        std::unique_lock<std::mutex> lk(prefetch_mutex_);
+        prefetch_cv_.wait(lk, [this] {
+            return !prefetch_queue_.empty() || !keep_running_;
+        });
+
+        if (!keep_running_ && prefetch_queue_.empty()) {
+            break;
+        }
+
+        auto fh = std::move(prefetch_queue_.front());
+        prefetch_queue_.pop_front();
+        lk.unlock();
+
+        auto [dir_name, file_name] = split_path_from_target(fh->get_logic_path());
+        auto [s, parent_dir] = find_dir(dir_name);
+        if (!s.ok()) {
+            continue;
+        }
+        auto files = parent_dir->list_files();
+        int index = -1;
+        for (int i = 0; i < (int)files.size(); i++) {
+            if (files[i]->get_inode() == fh->get_inode()) {
+                index = i;
+                break;
+            }
+        }
+
+        int toDo = cache_.capacity();
+        int already = 0;
+        for (int i = 0; i < toDo && !files.empty(); i++) {
+            int next_index = (index + i + 1) % files.size();
+            auto next_fh = files[next_index];
+            if (next_fh->is_cached()) {
+                already++;
+                continue;
+            }
+            cache_.insert(next_fh->get_inode(), next_fh);
+        }
+    }
+}
+
+// Spawn the background thread once:
+void StorageEngine::start_prefetcher() {
+    prefetch_thread_ = std::thread([this]{ this->prefetch_loop(); });
+}
+
+void StorageEngine::stop_prefetcher() {
+    {
+        std::lock_guard<std::mutex> lk(prefetch_mutex_);
+        keep_running_ = false;
+    }
+    prefetch_cv_.notify_all();
+    if (prefetch_thread_.joinable()) {
+        prefetch_thread_.join();
+    }
 }

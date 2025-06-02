@@ -6,7 +6,7 @@
 #include "fuse.h"
 #include "status.h"
 #include "cache.h"
-#include "cache_policies/filo_policy.h"
+#include "cache_policies/fifo_policy.h"
 
 #include <memory>
 
@@ -18,7 +18,7 @@ class StorageEngine {
               0, 1, "/", mount_path,
               std::make_shared<MetadataClient>(),
               std::make_shared<StorageClient>())),
-          cache_(std::make_unique<FILOEvictionPolicy>()) {}
+          cache_(std::make_unique<FIFOEvictionPolicy>()) {}
 
     ~StorageEngine() {}
 
@@ -56,6 +56,20 @@ class StorageEngine {
     std::pair<Status, Directory *> find_dir(const std::string &path);
     bool is_file(const std::string &path);
     bool is_dir(const std::string &path);
+
+    // A background thread to drain a job queue:
+    std::thread prefetch_thread_;
+    std::mutex   prefetch_mutex_;
+    std::condition_variable prefetch_cv_;
+
+    // Each job is simply "which FileHandle to prefetch next"
+    std::deque<std::shared_ptr<FileHandle>> prefetch_queue_;
+    bool keep_running_ = true;
+
+    void prefetch(std::shared_ptr<FileHandle> fh, int n);
+    void prefetch_loop();
+    void start_prefetcher();
+    void stop_prefetcher();
 };
 
 #endif // STORAGE_ENGINE_H
