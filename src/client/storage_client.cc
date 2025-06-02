@@ -1,12 +1,72 @@
 #include "storage_client.h"
-#include <brpc/channel.h>
 #include <cassert>
 #include <google/protobuf/empty.pb.h>
 #include <iostream>
 #include <liberasurecode/erasurecode.h>
 #include <stdexcept>
 #include <utility>
-#include <vector>
+
+// Helper struct to capture a single read-RPC result
+struct FragmentResult {
+    std::string node_name;
+    bool        ok;
+    std::string payload;
+    uint64_t    len;
+    std::string error_text;
+};
+
+// Launch one read_chunk RPC against `node` and return a FragmentResult
+static FragmentResult fetch_one_fragment(
+    const std::string &node,
+    const std::string &file_id,
+    StorageService_Stub *stub)
+{
+    ReadRequest req;
+    req.set_chunk_id(file_id);
+
+    Data resp;
+    brpc::Controller cntl;
+    stub->read_chunk(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        return FragmentResult{node, false, "", 0, cntl.ErrorText()};
+    } else {
+        return FragmentResult{node, true,
+                              std::string(resp.payload()), resp.len(), ""};
+    }
+}
+
+// Helper struct to capture a single write-RPC result
+struct WriteResult {
+    std::string node_name;
+    bool        ok;
+    std::string error_text;
+};
+
+// Launch one write_chunk RPC to `node` with the given payload
+static WriteResult send_one_fragment(
+    const std::string &node,
+    const std::string &file_id,
+    const char        *payload,
+    uint64_t           len,
+    StorageService_Stub *stub)
+{
+    Data node_data;
+    node_data.set_len(len);
+    node_data.set_payload(std::string(payload, len));
+
+    WriteRequest req;
+    req.set_chunk_id(file_id);
+    *req.mutable_data() = node_data;
+
+    WriteResponse resp;
+    brpc::Controller cntl;
+    stub->write_chunk(&cntl, &req, &resp, nullptr);
+    if (cntl.Failed()) {
+        return WriteResult{node, false, cntl.ErrorText()};
+    } else {
+        return WriteResult{node, true, ""};
+    }
+}
 
 StorageClient::StorageClient() {
     const std::vector<std::pair<std::string, std::string>> servers = {
@@ -30,38 +90,18 @@ StorageClient::StorageClient() {
         nodes_.emplace(server_name, std::move(node));
     }
 
-    // Init Erasure Code
-    struct ec_args args = {
-        .k = EC_K, // data frags
-        .m = EC_M  // parity frags
-    };
-
+    struct ec_args args = { .k = EC_K, .m = EC_M };
     ec_descriptor_ = liberasurecode_instance_create(
         EC_BACKEND_LIBERASURECODE_RS_VAND, &args);
     if (!ec_descriptor_) {
         throw std::runtime_error("Failed to create erasure code instance\n");
     }
-
-    stop_worker_   = false;
-    worker_thread_ = std::thread(&StorageClient::worker_loop, this);
 }
 
 StorageClient::~StorageClient() {
-    {
-        std::lock_guard<std::mutex> lk(queue_mutex_);
-        stop_worker_ = true;
-    }
-    queue_cv_.notify_one();
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
-    }
-
     nodes_.clear();
     liberasurecode_instance_destroy(ec_descriptor_);
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::pair<Status, Data>
 StorageClient::read(const std::vector<std::string> &data_nodes,
@@ -71,76 +111,93 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
         return {Status::IOError("Invalid node configuration"), Data()};
     }
 
-    // Read from data nodes
-    std::vector<std::string> fragment_data;
-    uint64_t frag_len = 0;
+    // 1) Launch all K data-node reads in parallel
+    std::vector<std::future<FragmentResult>> data_futures;
+    data_futures.reserve(EC_K);
+
     for (const auto &node : data_nodes) {
         if (!nodes_.contains(node)) {
             return {Status::IOError("Node not found: " + node), Data()};
         }
+        StorageService_Stub *stub = nodes_[node]->stub.get();
+        data_futures.push_back(
+            std::async(std::launch::async,
+                       &fetch_one_fragment,
+                       node,
+                       file_id,
+                       stub));
+    }
 
-        ReadRequest req;
-        req.set_chunk_id(file_id);
-        Data resp;
-        brpc::Controller cntl;
+    // 2) Collect results
+    std::vector<std::string> fragment_data;
+    fragment_data.reserve(EC_K);
+    uint64_t frag_len = 0;
 
-        nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::cerr << "Failed to read from data node " << node << ": "
-                      << cntl.ErrorText() << std::endl;
+    for (auto &fut : data_futures) {
+        FragmentResult fr = fut.get();
+        if (fr.ok) {
+            if (frag_len == 0) frag_len = fr.len;
+            else                assert(frag_len == fr.len);
+            fragment_data.push_back(std::move(fr.payload));
         } else {
-            fragment_data.push_back(resp.payload());
-            if (frag_len == 0) {
-                frag_len = resp.len();
+            std::cerr << "Failed to read from data node "
+                      << fr.node_name << ": "
+                      << fr.error_text << "\n";
+        }
+    }
+
+    // 3) If fewer than K, launch parity reads in parallel to fill missing
+    if (fragment_data.size() < EC_K) {
+        std::vector<std::future<FragmentResult>> parity_futures;
+        parity_futures.reserve(EC_M);
+
+        for (const auto &node : parity_nodes) {
+            if (!nodes_.contains(node)) {
+                return {Status::IOError("Node not found: " + node), Data()};
+            }
+            StorageService_Stub *stub = nodes_[node]->stub.get();
+            parity_futures.push_back(
+                std::async(std::launch::async,
+                           &fetch_one_fragment,
+                           node,
+                           file_id,
+                           stub));
+        }
+
+        for (auto &fut : parity_futures) {
+            if (fragment_data.size() >= EC_K) break;
+            FragmentResult fr = fut.get();
+            if (fr.ok) {
+                fragment_data.push_back(std::move(fr.payload));
             } else {
-                assert(frag_len == resp.len());
+                std::cerr << "Failed to read from parity node "
+                          << fr.node_name << ": "
+                          << fr.error_text << "\n";
             }
         }
     }
 
-    // Read from parity nodes if needed
-    for (size_t i = 0; i < parity_nodes.size() && fragment_data.size() < EC_K; i++) {
-        const std::string &node = parity_nodes[i];
-        if (!nodes_.contains(node)) {
-            return {Status::IOError("Node not found: " + node), Data()};
-        }
-
-        ReadRequest req;
-        req.set_chunk_id(file_id);
-        Data resp;
-        brpc::Controller cntl;
-
-        nodes_[node]->stub->read_chunk(&cntl, &req, &resp, nullptr);
-        if (cntl.Failed()) {
-            std::cerr << "Failed to read from parity node " << node << ": "
-                      << cntl.ErrorText() << std::endl;
-        } else {
-            fragment_data.push_back(resp.payload());
-        }
-    }
-
-    // Check fragment count
+    // 4) If still fewer than K, error
     if (fragment_data.size() < EC_K) {
-        return {Status::IOError("Insufficient fragments for reconstruction"),
-                Data()};
+        return {Status::IOError("Insufficient fragments for reconstruction"), Data()};
     }
 
-    // Convert to pointer array to match liberasurecode API
+    // 5) Prepare for decode
     std::vector<char *> fragments;
+    fragments.reserve(fragment_data.size());
     for (auto &frag : fragment_data) {
         fragments.push_back(const_cast<char *>(frag.data()));
     }
 
-    // Decode data
+    // 6) Decode
     char *decoded_data = nullptr;
     uint64_t decoded_len = 0;
-
-    int res = liberasurecode_decode(ec_descriptor_, fragments.data(), EC_K,
-                                    frag_len, 0, &decoded_data, &decoded_len);
+    int res = liberasurecode_decode(
+        ec_descriptor_, fragments.data(), EC_K, frag_len, 0,
+        &decoded_data, &decoded_len);
 
     if (res != 0) {
-        return {Status::IOError("Decode failed: " + std::to_string(res)),
-                Data()};
+        return {Status::IOError("Decode failed: " + std::to_string(res)), Data()};
     }
 
     Data result;
@@ -154,34 +211,25 @@ StorageClient::read(const std::vector<std::string> &data_nodes,
     return {Status::OK(), result};
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::pair<Status, uint64_t> StorageClient::write(const std::vector<std::string> &data_nodes,
-                                                 const std::vector<std::string> &parity_nodes,
-                                                 const std::string &file_id,
-                                                 const Data &data) {
+std::pair<Status, uint64_t>
+StorageClient::write(const std::vector<std::string> &data_nodes,
+                     const std::vector<std::string> &parity_nodes,
+                     const std::string &file_id,
+                     const Data &data) {
     if (data_nodes.size() != EC_K || parity_nodes.size() != EC_M) {
-        return { Status::IOError("Invalid node configuration"), 0 };
+        return {Status::IOError("Invalid node configuration"), 0};
     }
 
     WriteJob job;
     job.data_nodes   = data_nodes;
     job.parity_nodes = parity_nodes;
     job.file_id      = file_id;
-    job.data_payload = data;  // copy: Data holds payload + length
+    job.data_payload = data;
 
-    // {
-    //     std::lock_guard<std::mutex> lk(queue_mutex_);
-    //     write_queue_.push(std::move(job));
-    // }
-    // queue_cv_.notify_one();
+    // Perform write (blocking until all fragments written)
     process_write(job);
-    // We don't know “bytes_written” yet, since the job runs in background.
-    return { Status::OK(), 0ULL };
+    return {Status::OK(), 0ULL}; // bytes_written not computed here
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Status StorageClient::remove_file(const std::vector<std::string> &data_nodes,
                                   const std::vector<std::string> &parity_nodes,
@@ -190,7 +238,6 @@ Status StorageClient::remove_file(const std::vector<std::string> &data_nodes,
         return {Status::IOError("Invalid node configuration")};
     }
 
-    // Remove from nodes
     for (size_t i = 0; i < EC_K + EC_M; i++) {
         const std::string &node =
             (i < EC_K) ? data_nodes[i] : parity_nodes[i - EC_K];
@@ -205,8 +252,8 @@ Status StorageClient::remove_file(const std::vector<std::string> &data_nodes,
 
         nodes_[node]->stub->delete_chunk(&cntl, &req, &resp, nullptr);
         if (cntl.Failed()) {
-            std::cerr << "Failed to delete file from node " << node << ": "
-                      << cntl.ErrorText() << std::endl;
+            std::cerr << "Failed to delete file from node " << node
+                      << ": " << cntl.ErrorText() << "\n";
             return Status::IOError(cntl.ErrorText());
         }
     }
@@ -214,92 +261,77 @@ Status StorageClient::remove_file(const std::vector<std::string> &data_nodes,
     return Status::OK();
 }
 
-// -------------------------------------------------------------------------
-// The background worker thread: wait for jobs, then call process_one_write().
-// -------------------------------------------------------------------------
-void StorageClient::worker_loop() {
-    while (true) {
-        WriteJob job;
-        {
-            std::unique_lock<std::mutex> lk(queue_mutex_);
-            queue_cv_.wait(lk, [this]() {
-                return stop_worker_ || !write_queue_.empty();
-            });
-            if (stop_worker_ && write_queue_.empty()) {
-                // Time to exit cleanly
-                return;
-            }
-            job = std::move(write_queue_.front());
-            write_queue_.pop();
-        }
-        // Outside the lock, perform the actual erasure encode + RPC
-        process_write(job);
-    }
-}
-
-// -------------------------------------------------------------------------
-// Exactly the same logic you had before in write(...), but now in one place.
-// This method runs in the background worker thread.
-// -------------------------------------------------------------------------
 void StorageClient::process_write(const WriteJob &job) {
-    // 1) Erasure‐encode job.data_payload
+    // 1) Erasure-encode
     char **data_fragments   = nullptr;
     char **parity_fragments = nullptr;
     uint64_t fragment_len   = 0;
 
-    int r = liberasurecode_encode(ec_descriptor_,
-                                  job.data_payload.payload().data(),
-                                  job.data_payload.len(),
-                                  &data_fragments,
-                                  &parity_fragments,
-                                  &fragment_len);
+    int r = liberasurecode_encode(
+        ec_descriptor_,
+        job.data_payload.payload().data(),
+        job.data_payload.len(),
+        &data_fragments,
+        &parity_fragments,
+        &fragment_len);
     if (r != 0) {
-        if (data_fragments)   liberasurecode_encode_cleanup(ec_descriptor_, data_fragments, nullptr);
-        if (parity_fragments) liberasurecode_encode_cleanup(ec_descriptor_, nullptr, parity_fragments);
+        if (data_fragments)
+            liberasurecode_encode_cleanup(ec_descriptor_, data_fragments, nullptr);
+        if (parity_fragments)
+            liberasurecode_encode_cleanup(ec_descriptor_, nullptr, parity_fragments);
         return;
     }
 
-    // 2) RPC to each data node
-    for (int i = 0; i < EC_K; i++) {
+    // 2) Launch all K+M writes in parallel
+    std::vector<std::future<WriteResult>> write_futures;
+    write_futures.reserve(EC_K + EC_M);
+
+    // 2a) Data-node writes
+    for (int i = 0; i < EC_K; ++i) {
         const std::string &node = job.data_nodes[i];
-        if (!nodes_.count(node)) {
-            continue;
-        }
-        Data node_data;
-        node_data.set_len(fragment_len);
-        node_data.set_payload(std::string(data_fragments[i], fragment_len));
-
-        WriteRequest req;
-        req.set_chunk_id(job.file_id);
-        *req.mutable_data() = node_data;
-
-        WriteResponse resp;
-        brpc::Controller cntl;
-        nodes_.at(node)->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        if (!nodes_.count(node)) continue;
+        StorageService_Stub *stub = nodes_.at(node)->stub.get();
+        write_futures.push_back(
+            std::async(std::launch::async,
+                       &send_one_fragment,
+                       node,
+                       job.file_id,
+                       data_fragments[i],
+                       fragment_len,
+                       stub));
     }
 
-    // 3) RPC to each parity node
-    for (int i = 0; i < EC_M; i++) {
+    // 2b) Parity-node writes
+    for (int i = 0; i < EC_M; ++i) {
         const std::string &node = job.parity_nodes[i];
-        if (!nodes_.count(node)) {
-            continue;
-        }
-        Data node_data;
-        node_data.set_len(fragment_len);
-        node_data.set_payload(std::string(parity_fragments[i], fragment_len));
-
-        WriteRequest req;
-        req.set_chunk_id(job.file_id);
-        *req.mutable_data() = node_data;
-
-        WriteResponse resp;
-        brpc::Controller cntl;
-        nodes_.at(node)->stub->write_chunk(&cntl, &req, &resp, nullptr);
+        if (!nodes_.count(node)) continue;
+        StorageService_Stub *stub = nodes_.at(node)->stub.get();
+        write_futures.push_back(
+            std::async(std::launch::async,
+                       &send_one_fragment,
+                       node,
+                       job.file_id,
+                       parity_fragments[i],
+                       fragment_len,
+                       stub));
     }
 
-    // 4) Cleanup erasure buffers
-    r = liberasurecode_encode_cleanup(ec_descriptor_,
-                                      data_fragments,
-                                      parity_fragments);
-}
+    // 3) Wait for all to complete
+    for (auto &fut : write_futures) {
+        WriteResult wr = fut.get();
+        if (!wr.ok) {
+            std::cerr << "Failed to write to node " << wr.node_name
+                      << ": " << wr.error_text << "\n";
+        }
+    }
 
+    // 4) Cleanup buffers
+    int cleanup_res = liberasurecode_encode_cleanup(
+        ec_descriptor_,
+        data_fragments,
+        parity_fragments);
+    if (cleanup_res != 0) {
+        std::cerr << "Error during erasure-encode cleanup: "
+                  << cleanup_res << "\n";
+    }
+}
